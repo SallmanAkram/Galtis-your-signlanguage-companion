@@ -1,0 +1,6 @@
+{
+  "name": "SignBridge",
+  "description": "SignBridge - 3D ASL Sign Language Companion featuring the Galtis avatar and the StudioGalt Motion Capture Dictionary with live bone animation coordinates, gesture playback, and voice-to-sign translation.",
+  "requestFramePermissions": ["microphone", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

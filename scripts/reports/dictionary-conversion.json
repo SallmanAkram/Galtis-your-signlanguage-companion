@@ -1,0 +1,68 @@
+{
+  "version": "12843fdf50113f32822f7bb92c37b5f3178f273634f294e37c5d6d43485984aa",
+  "sourceDirectory": "C:\\Users\\Salman Akram\\OneDrive - University of Wollongong\\Documents\\ChatGPT\\SignBridge\\public\\animations\\SignLanguage_Dictionary",
+  "sourceFiles": 2654,
+  "distinctLabels": 2456,
+  "files": {
+    "SG ASL Apple 1 2023-7-27 No Mesh Mixamo.fbx": {
+      "status": "ok",
+      "word": "APPLE 1",
+      "date": "2023-07-27",
+      "rig": "No Mesh Mixamo",
+      "animationFile": "apple_1.json",
+      "inputHash": "c88a7ca36d7f26968b4500c1e71289e6bc4647111f01e43b3332d163fc47c835",
+      "outputHash": "24b6945f56baebc6608abc7198c62f2ccaeb0420d8126743b5b53241935afef0",
+      "secondaryHash": "d0e3d11f406b60de02c92a7952f23540bd6f5c0287971ccd853f7a713c26a7e1",
+      "family": "mixamo",
+      "durationSec": 2.4833332856496173,
+      "mappedBones": 53,
+      "bytes": 83172,
+      "sourceClips": 1
+    },
+    "SG ASL Assign 1 2023-9-20 No Mesh Mixamo.fbx": {
+      "status": "ok",
+      "word": "ASSIGN 1",
+      "date": "2023-09-20",
+      "rig": "No Mesh Mixamo",
+      "animationFile": "assign_1.json",
+      "inputHash": "90ed8a28d30ea30a2db733cd7e87bfb98d45245e11c359ccb9a0f857240279c1",
+      "outputHash": "14a09ffd2e114f7149db49cebf32f64125b368ac46ec7143149b5caf2f78cb51",
+      "secondaryHash": "f62abd4424fe041a3729cdf36c1f41008b98564fa5917707790a59afd2ecddff",
+      "family": "galtis",
+      "durationSec": 4.450000222524007,
+      "mappedBones": 53,
+      "bytes": 183500,
+      "sourceClips": 1
+    },
+    "SG ASL Dabble 2025-12-22 Rigify APose.fbx": {
+      "status": "ok",
+      "word": "DABBLE",
+      "date": "2025-12-22",
+      "rig": "Rigify APose",
+      "animationFile": "dabble.json",
+      "inputHash": "6e7974ef40dd983041f7feb66fbd6390decfc2c8632d604d424d88ec5b47a09f",
+      "outputHash": "ba6635aa625fa16627dbb53f48acb227ba9b5dcbdfbf7cfa8ba096bc3c5168ab",
+      "secondaryHash": "032bd11ead63f7bf8a73679429fc7d188505e50842ed942fba32fc1e6416a616",
+      "family": "rigify",
+      "durationSec": 1.600000023841858,
+      "mappedBones": 61,
+      "bytes": 78033,
+      "sourceClips": 1
+    },
+    "SG ASL Bad 2023-12-14 No Mesh Mixamo.fbx": {
+      "status": "ok",
+      "word": "BAD",
+      "date": "2023-12-14",
+      "rig": "No Mesh Mixamo",
+      "animationFile": "bad.json",
+      "inputHash": "0f2f26e992e3c355b44216a91aaefbe8f3b6e6053c3c064a956b6498f1ec21e7",
+      "outputHash": "c0efe9aebef7789a2c91e571384e006188c969fdbdc463a5d8a8bf56e18b1973",
+      "secondaryHash": "fdba18fbaaa4f6096e04e93e9f163908cfaa217e8d57becfb8c05d531abdf2df",
+      "family": "mixamo",
+      "durationSec": 3.2333332856496173,
+      "mappedBones": 53,
+      "bytes": 109429,
+      "sourceClips": 1
+    }
+  }
+}
