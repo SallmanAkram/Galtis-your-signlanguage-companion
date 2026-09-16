@@ -278,7 +278,7 @@ export class GaltisOriginalAvatar {
       const rawClip = THREE.AnimationClip.parse(json);
       // Three.js parse assigns json.uuid even when missing. Never let unrelated
       // clips share the undefined mixer-cache key (older exports omitted UUIDs).
-      rawClip.uuid ||= THREE.MathUtils.generateUUID();
+      (rawClip as any).uuid = rawClip.uuid || THREE.MathUtils.generateUUID();
       if (version !== this.loadVersion) return null;
       rawClip.tracks = rawClip.tracks.filter(track => this.modelRoot?.getObjectByName(track.name.split('.')[0]));
       if (!rawClip.tracks.length || !rawClip.validate()) throw new Error('Animation has no valid tracks for this rig');

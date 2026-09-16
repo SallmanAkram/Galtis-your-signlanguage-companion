@@ -13,6 +13,8 @@ import { TranscriptItem } from '../types';
 
 interface AiSpeechTranslatorViewProps {
   isListening: boolean;
+  isTranscribing?: boolean;
+  errorMsg?: string | null;
   onToggleListening: () => void;
   audioLevel: number;
   interimText: string;
@@ -25,6 +27,8 @@ interface AiSpeechTranslatorViewProps {
 
 export const AiSpeechTranslatorView: React.FC<AiSpeechTranslatorViewProps> = ({
   isListening,
+  isTranscribing,
+  errorMsg,
   onToggleListening,
   audioLevel,
   interimText,
@@ -107,9 +111,17 @@ export const AiSpeechTranslatorView: React.FC<AiSpeechTranslatorViewProps> = ({
         {/* Status Text */}
         <div className="mt-4 text-center">
           <span className="text-xs font-semibold uppercase tracking-wider text-purple-300">
-            {isListening ? 'Listening to speech...' : 'Tap microphone to speak'}
+            {isTranscribing
+              ? 'Transcribing audio with AI...'
+              : isListening
+              ? 'Listening to speech...'
+              : 'Tap microphone to speak'}
           </span>
-          {interimText ? (
+          {errorMsg ? (
+            <p className="mt-2 text-xs text-amber-200 font-medium px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-400/30 max-w-xs mx-auto">
+              {errorMsg}
+            </p>
+          ) : interimText ? (
             <p className="mt-1 text-sm font-medium text-white px-4 py-1.5 rounded-full bg-purple-900/60 border border-purple-400/30">
               "{interimText}"
             </p>

@@ -25,9 +25,12 @@ import {
   GestureKeyframe,
   StageBackground,
 } from './types';
-import { Sparkles, Mic, MicOff, Send, Eye, Activity } from 'lucide-react';
+import { Sparkles, Mic, MicOff, Send, Eye, Activity, AlertTriangle } from 'lucide-react';
 
 export default function App() {
+  const isSecureContext = typeof window !== 'undefined' ? window.isSecureContext : true;
+  const [showInsecureBanner, setShowInsecureBanner] = useState(!isSecureContext);
+
   // Active companion (Defaulting to Galtis MoCap Rig)
   const [currentCompanion, setCurrentCompanion] = useState<Companion>(COMPANIONS[0]);
 
@@ -103,11 +106,15 @@ export default function App() {
   // Speech Recognition Hook (Used for Live ASL signing performance)
   const {
     isListening,
+    isSupported,
+    isTranscribing,
     interimText,
     latestTranscribedText,
     audioLevel,
     audioFrequencies,
     transcriptHistory,
+    errorMsg,
+    setErrorMsg,
     toggleListening,
     triggerSimulatedSpeech,
     processFinalSpeech,
@@ -125,7 +132,7 @@ export default function App() {
   const toggleInputDictation = useCallback(() => {
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRec) {
-      alert('Speech recognition is not supported in this browser.');
+      setErrorMsg('Direct input dictation is not supported in this browser. Please use the Tap to Talk mic button or type directly.');
       return;
     }
 
@@ -352,6 +359,49 @@ export default function App() {
         id="app-main-viewport"
         className={`relative w-full h-full min-h-0 mx-auto flex flex-col justify-between overflow-hidden ${isShaderBg ? 'bg-[#090314]' : 'bg-[#26004d]'} transition-colors duration-500`}
       >
+        {/* Insecure Context (HTTP on LAN IP) Warning Banner for Mobile Devices */}
+        {showInsecureBanner && !isSecureContext && (
+          <div className="relative z-50 bg-amber-500/95 text-neutral-950 px-4 py-2 text-xs flex items-center justify-between shadow-lg border-b border-amber-400">
+            <div className="flex items-center gap-2 pr-2 font-medium">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-950" />
+              <span>
+                Microphone & Camera require HTTPS or http://localhost when accessing from mobile devices. Please open the HTTPS development URL.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href={typeof window !== 'undefined' ? window.location.href.replace(/^http:/, 'https:') : '#'}
+                className="px-2.5 py-1 bg-black text-white rounded-lg font-bold text-[11px] shadow hover:bg-neutral-800 transition"
+              >
+                Switch to HTTPS
+              </a>
+              <button
+                type="button"
+                onClick={() => setShowInsecureBanner(false)}
+                className="text-neutral-950/70 hover:text-neutral-950 text-xs px-1 font-bold"
+                aria-label="Dismiss banner"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Global Speech / Camera Error Toast */}
+        {errorMsg && (
+          <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 max-w-md w-[calc(100%-2rem)] px-4 py-2.5 rounded-2xl bg-neutral-900/95 border border-purple-400/50 backdrop-blur-md shadow-2xl text-xs text-purple-200 flex items-center justify-between gap-3">
+            <span className="leading-snug">{errorMsg}</span>
+            <button
+              type="button"
+              onClick={() => setErrorMsg(null)}
+              className="text-white/60 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded hover:bg-white/10"
+              aria-label="Dismiss error"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* 3D PURPLE STAGE & BACKGROUND (FULLSCREEN ACROSS ALL DEVICES) */}
         <div
           id="stage-panel"
@@ -698,7 +748,9 @@ export default function App() {
 
               {/* Status Label */}
               <span className="text-xs font-semibold tracking-wide pr-1 select-none">
-                {isListening ? (
+                {isTranscribing ? (
+                  <span className="text-teal-300 animate-pulse">Transcribing...</span>
+                ) : isListening ? (
                   <span className="text-purple-300">Live</span>
                 ) : (
                   <span className="text-white/80">Tap to Talk</span>

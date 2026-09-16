@@ -164,33 +164,63 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
   // 2. Camera Controls
   const startCamera = async () => {
     setCameraError(null);
+
+    // Guard all camera initialization:
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError(
+        window.isSecureContext === false
+          ? 'Camera access requires HTTPS when testing from another device or mobile phone.'
+          : 'Camera is not supported or permission was denied in this browser. Please use video upload.'
+      );
+      setIsCameraActive(false);
+      return;
+    }
+
     try {
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const constraints: MediaStreamConstraints = {
         video: {
-          facingMode: 'user',
-          width: { ideal: 640 },
-          height: { ideal: 480 },
+          facingMode: { ideal: 'user' },
+          width: { ideal: 640, max: 1280 },
+          height: { ideal: 480, max: 720 },
         },
         audio: false,
-      });
+      };
+
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (constraintErr: any) {
+        // If this fails with OverconstrainedError, automatically retry with minimal constraints
+        if (
+          constraintErr?.name === 'OverconstrainedError' ||
+          constraintErr?.name === 'ConstraintNotSatisfiedError'
+        ) {
+          console.info('Retrying camera with minimal constraints { video: true, audio: false }...');
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        } else {
+          throw constraintErr;
+        }
+      }
 
       mediaStreamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play();
+          videoRef.current?.play().catch((playErr) => console.warn('Webcam video play error:', playErr));
           setIsCameraActive(true);
         };
       }
     } catch (err: any) {
       console.warn('Webcam access error:', err);
       setCameraError(
-        err.name === 'NotAllowedError'
+        err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError'
           ? 'Camera permission denied. Please enable camera access in browser settings.'
+          : window.isSecureContext === false
+          ? 'Camera access requires HTTPS when testing from another device or mobile phone.'
           : 'Unable to access device camera. Check permissions or try video upload.'
       );
       setIsCameraActive(false);
@@ -854,9 +884,9 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
             >
               <video
                 ref={videoRef}
-                playsInline
-                muted
-                autoPlay
+                playsInline={true}
+                autoPlay={true}
+                muted={true}
                 className="absolute inset-0 w-full h-full object-cover"
               />
               <canvas
@@ -870,17 +900,27 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
           {source === 'webcam' && (!isCameraActive || cameraError) && (
             <div className="absolute inset-0 z-20 bg-black/85 backdrop-blur-sm p-4 flex flex-col items-center justify-center text-center">
               <CameraOff className="w-8 h-8 text-rose-400 mb-2" />
-              <p className="text-xs text-rose-200 font-medium max-w-xs">
+              <p className="text-xs text-rose-200 font-medium max-w-xs leading-relaxed">
                 {cameraError || 'Camera is currently paused or inactive.'}
               </p>
-              <button
-                type="button"
-                onClick={startCamera}
-                className="mt-3 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-semibold text-white transition flex items-center gap-1.5 shadow"
-              >
-                <Camera className="w-3.5 h-3.5" />
-                <span>Start Camera</span>
-              </button>
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-semibold text-white transition flex items-center gap-1.5 shadow"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>Start Camera</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectSource('upload')}
+                  className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-xs font-semibold text-white transition flex items-center gap-1.5 shadow"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Use Video Upload</span>
+                </button>
+              </div>
             </div>
           )}
 
