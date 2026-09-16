@@ -25,6 +25,7 @@ interface Stage3DProps {
   manualKeyposeKeyframe?: GestureKeyframe | null;
   avatarSkin?: GaltisModelSource;
   stageBackground?: StageBackground;
+  isDictionaryOpen?: boolean;
 }
 
 export const Stage3D: React.FC<Stage3DProps> = ({
@@ -40,6 +41,7 @@ export const Stage3D: React.FC<Stage3DProps> = ({
   manualKeyposeKeyframe,
   avatarSkin = 'full_mesh',
   stageBackground = 'mist',
+  isDictionaryOpen = false,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const characterRef = useRef<Character3D | null>(null);
@@ -71,8 +73,27 @@ export const Stage3D: React.FC<Stage3DProps> = ({
   const previousMousePositionRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const orbitAngleRef = useRef<{ theta: number; phi: number }>({ theta: 0, phi: 0 });
 
-  const liveProps = useRef({ companion, speed, viewMode, showMist, onCoordinatesUpdate });
-  liveProps.current = { companion, speed, viewMode, showMist, onCoordinatesUpdate };
+  const liveProps = useRef({
+    companion,
+    speed,
+    viewMode,
+    showMist,
+    onCoordinatesUpdate,
+    isDictionaryOpen,
+  });
+  liveProps.current = {
+    companion,
+    speed,
+    viewMode,
+    showMist,
+    onCoordinatesUpdate,
+    isDictionaryOpen,
+  };
+
+  // When viewMode changes, smoothly reset manual orbit drag offset to allow clean preset framing
+  useEffect(() => {
+    orbitAngleRef.current = { theta: 0, phi: 0 };
+  }, [viewMode]);
 
   // 1. Initialize Scene, Camera, Mist, Stage, Lights
   useEffect(() => {
@@ -197,27 +218,35 @@ export const Stage3D: React.FC<Stage3DProps> = ({
         activeEnvInstanceRef.current.onAnimate(delta, elapsedTime);
       }
 
+      const {
+        companion: activeCompanion,
+        speed: activeSpeed,
+        viewMode: activeViewMode,
+        onCoordinatesUpdate: activeOnCoords,
+        isDictionaryOpen: activeIsDictOpen,
+      } = liveProps.current;
+
       // Update Active Character / Avatar
-      const isOriginal = companion.avatarVariant === 'galtis_original';
+      const isOriginal = activeCompanion.avatarVariant === 'galtis_original';
 
       if (isOriginal && galtisAvatarRef.current) {
-        galtisAvatarRef.current.update(delta, elapsedTime, speed);
+        galtisAvatarRef.current.update(delta, elapsedTime, activeSpeed || 1.0);
         // Feed live telemetry coordinates
-        if (onCoordinatesUpdate && Math.random() < 0.35) {
+        if (activeOnCoords && Math.random() < 0.35) {
           const signName = activeSignItemRef.current?.name || 'GALTIS';
           const progress = (currentKeyframeIdxRef.current + 1) / 3;
-          onCoordinatesUpdate(galtisAvatarRef.current.getLiveCoordinates(signName, progress));
+          activeOnCoords(galtisAvatarRef.current.getLiveCoordinates(signName, progress));
         }
       } else if (characterRef.current) {
-        characterRef.current.update(delta, speed);
-        if (onCoordinatesUpdate && Math.random() < 0.35) {
-          onCoordinatesUpdate(characterRef.current.getLiveCoordinates());
+        characterRef.current.update(delta, activeSpeed || 1.0);
+        if (activeOnCoords && Math.random() < 0.35) {
+          activeOnCoords(characterRef.current.getLiveCoordinates());
         }
       }
 
       // Camera position interpolation based on view mode and user drag
-      const targetCamPos = getCameraTarget(viewMode, orbitAngleRef.current, camera.aspect);
-      camera.position.lerp(targetCamPos.position, delta * 4.0);
+      const targetCamPos = getCameraTarget(activeViewMode, orbitAngleRef.current, camera.aspect, activeIsDictOpen);
+      camera.position.lerp(targetCamPos.position, delta * 5.0);
       camera.lookAt(targetCamPos.lookAt);
 
       renderer.render(scene, camera);
@@ -558,18 +587,85 @@ export const Stage3D: React.FC<Stage3DProps> = ({
   );
 };
 
-// Fit the signing envelope to both dimensions of the available canvas.
-function getCameraTarget(mode: CameraViewMode, userOrbit: { theta: number; phi: number }, aspect: number) {
-  const presets = {
-    front: { y: 0.96, height: 2.05, width: 1.65 },
-    upper_body: { y: 1.25, height: 1.25, width: 1.6 },
-    hands_closeup: { y: 1.23, height: 1.05, width: 1.3 },
-    stage_orbit: { y: 0.85, height: 2.3, width: 3.65 },
-  };
-  const frame = presets[mode];
-  const distance = Math.max(frame.height / 2, frame.width / (2 * Math.max(0.2, aspect))) / Math.tan(THREE.MathUtils.degToRad(21));
+// Calculate camera framing target based on mode, responsive screen aspect, user drag orbit, and dictionary mode.
+function getCameraTarget(
+  mode: CameraViewMode,
+  userOrbit: { theta: number; phi: number },
+  aspect: number,
+  isDictionaryMode: boolean = false
+) {
+  const isPortrait = aspect < 1.0;
+  const isMobile = isPortrait || aspect < 0.88;
+
+  let targetY = 0.90;
+  let targetLookAtY = 0.88;
+  let targetDistance = 2.60;
+
+  // When dictionary is open and user is in default front mode, automatically switch to close-up upper body
+  const effectiveMode = isDictionaryMode && mode === 'front' ? 'upper_body' : mode;
+
+  switch (effectiveMode) {
+    case 'front':
+      if (isMobile) {
+        // Mobile Normal Mode: Closer angle / closer look as requested
+        // Instead of pulling way back in portrait, frame closer from knees/hips up to head with hands prominent
+        targetY = 1.08;
+        targetLookAtY = 1.02;
+        targetDistance = 2.40;
+      } else {
+        // Desktop Normal Mode: Full body view head-to-toe with stage podium
+        targetY = 0.90;
+        targetLookAtY = 0.88;
+        targetDistance = 2.60;
+      }
+      break;
+
+    case 'upper_body':
+      if (isMobile) {
+        // Mobile Close-up: Upper body & hands framed nicely in the visible upper half of mobile screen
+        targetY = 1.28;
+        targetLookAtY = 1.20;
+        targetDistance = isDictionaryMode ? 1.85 : 1.95;
+      } else {
+        // Desktop Close-up: Very close-up view of upper body, chest, head and signing hands
+        targetY = 1.26;
+        targetLookAtY = 1.24;
+        targetDistance = isDictionaryMode ? 1.65 : 1.75;
+      }
+      break;
+
+    case 'hands_closeup':
+      if (isMobile) {
+        targetY = 1.24;
+        targetLookAtY = 1.20;
+        targetDistance = 1.55;
+      } else {
+        targetY = 1.22;
+        targetLookAtY = 1.20;
+        targetDistance = 1.40;
+      }
+      break;
+
+    case 'stage_orbit':
+      if (isMobile) {
+        targetY = 0.95;
+        targetLookAtY = 0.90;
+        targetDistance = 3.8;
+      } else {
+        targetY = 0.88;
+        targetLookAtY = 0.85;
+        targetDistance = 3.4;
+      }
+      break;
+  }
+
+  // Calculate orbital position with user drag offsets
+  const posX = Math.sin(userOrbit.theta) * targetDistance;
+  const posY = targetY + 0.12 + userOrbit.phi;
+  const posZ = Math.cos(userOrbit.theta) * targetDistance;
+
   return {
-    position: new THREE.Vector3(Math.sin(userOrbit.theta) * distance, frame.y + 0.12 + userOrbit.phi, Math.cos(userOrbit.theta) * distance),
-    lookAt: new THREE.Vector3(0, frame.y, 0),
+    position: new THREE.Vector3(posX, posY, posZ),
+    lookAt: new THREE.Vector3(0, targetLookAtY, 0),
   };
 }

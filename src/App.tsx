@@ -271,9 +271,22 @@ export default function App() {
     }
   }, []);
 
+  // Auto-switch camera to close-up upper body when dictionary is opened, and restore on normal mode
+  const isDictionaryActive = activeTab === 'dictionary' || isFullDictionaryModalOpen;
+  const userSelectedViewModeRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (isDictionaryActive) {
+      setSettings((prev) => ({ ...prev, viewMode: 'upper_body' }));
+    } else if (!userSelectedViewModeRef.current) {
+      setSettings((prev) => ({ ...prev, viewMode: 'front' }));
+    }
+  }, [isDictionaryActive]);
+
   // Camera view angle cycle
   const handleCycleViewMode = () => {
-    const modes: CameraViewMode[] = ['front', 'hands_closeup', 'upper_body', 'stage_orbit'];
+    userSelectedViewModeRef.current = true;
+    const modes: CameraViewMode[] = ['front', 'upper_body', 'hands_closeup', 'stage_orbit'];
     const nextIdx = (modes.indexOf(settings.viewMode) + 1) % modes.length;
     setSettings((prev) => ({ ...prev, viewMode: modes[nextIdx] }));
   };
@@ -485,6 +498,7 @@ export default function App() {
               manualKeyposeKeyframe={manualKeyframe}
               avatarSkin={avatarSkin}
               stageBackground={stageBackground}
+              isDictionaryOpen={isDictionaryActive}
             />
           </div>
         </div>
@@ -511,18 +525,18 @@ export default function App() {
               {/* Camera View Mode Switcher */}
               <button
                 onClick={handleCycleViewMode}
-                title={`Camera Framing: ${settings.viewMode.replace('_', ' ').toUpperCase()} (Click to cycle)`}
-                aria-label="Cycle camera framing"
+                title={`Camera Angle: ${settings.viewMode.replace('_', ' ').toUpperCase()} (Click to cycle)`}
+                aria-label="Cycle camera angle"
                 className="group flex items-center gap-1.5 h-8 sm:h-9 px-2.5 sm:px-3.5 rounded-full bg-white/[0.07] hover:bg-white/[0.16] border border-white/10 hover:border-white/25 text-white transition-all duration-200 active:scale-95 shadow-sm"
               >
                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-300 group-hover:text-purple-200 transition-colors" />
                 <span className="text-[11px] sm:text-xs font-semibold tracking-wide text-white/90 group-hover:text-white">
                   {settings.viewMode === 'front'
-                    ? 'Front'
+                    ? (isDictionaryActive ? 'Close-Up' : 'Front')
+                    : settings.viewMode === 'upper_body'
+                    ? 'Upper'
                     : settings.viewMode === 'hands_closeup'
                     ? 'Hands'
-                    : settings.viewMode === 'upper_body'
-                    ? 'Body'
                     : 'Orbit'}
                 </span>
               </button>
