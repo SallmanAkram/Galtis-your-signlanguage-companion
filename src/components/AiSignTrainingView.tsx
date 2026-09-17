@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Camera,
   CameraOff,
-  Upload,
   Play,
   Pause,
   RotateCcw,
@@ -11,15 +10,15 @@ import {
   Crosshair,
   Copy,
   Check,
-  FileVideo,
   FlipHorizontal,
-  Video,
 } from 'lucide-react';
 import { FilesetResolver, HandLandmarker, PoseLandmarker } from '@mediapipe/tasks-vision';
 
 interface AiSignTrainingViewProps {
   onSelectWord: (word: string) => void;
   currentSignName?: string | null;
+  uploadedFile?: File | null;
+  onClearUploadedFile?: () => void;
 }
 
 type InputSource = 'upload' | 'webcam';
@@ -54,9 +53,11 @@ interface BodyCoordinates {
 
 export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
   onSelectWord,
+  uploadedFile,
+  onClearUploadedFile,
 }) => {
-  // Primary mode is 'upload' as requested
-  const [source, setSource] = useState<InputSource>('upload');
+  // Primary mode is 'webcam' as requested
+  const [source, setSource] = useState<InputSource>('webcam');
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -69,7 +70,6 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
   const [hasUploadedVideo, setHasUploadedVideo] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isVideoPaused, setIsVideoPaused] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
 
   // Real-time tracking data
   const [predictedSign, setPredictedSign] = useState<string | null>(null);
@@ -87,7 +87,6 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
   // DOM Refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const videoUrlRef = useRef<string | null>(null);
 
   // Model & loop refs
@@ -246,39 +245,21 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
     }
   };
 
-  // Switch Source Mode: Upload vs Webcam
-  const handleSelectSource = (newSource: InputSource) => {
-    if (newSource === source) {
-      // If user clicks upload while already on upload, trigger file picker directly
-      if (newSource === 'upload') {
-        fileInputRef.current?.click();
-      }
-      return;
-    }
-
-    setSource(newSource);
-    setPredictedSign(null);
-    setConfidence(0);
-
-    if (newSource === 'webcam') {
-      // Switching to webcam: pause any uploaded video and start camera
-      if (videoRef.current) {
-        videoRef.current.pause();
-      }
+  // Auto-start camera when source is webcam on mount
+  useEffect(() => {
+    if (source === 'webcam') {
       startCamera();
-    } else if (newSource === 'upload') {
-      // Switching to upload: turn off webcam hardware
-      stopCamera();
-      if (videoUrlRef.current && videoRef.current) {
-        videoRef.current.srcObject = null;
-        videoRef.current.src = videoUrlRef.current;
-        videoRef.current.play();
-        setIsVideoPaused(false);
-      }
     }
-  };
+  }, []);
 
-  // 3. File Upload Processing
+  // Watch for uploaded video file passed from parent
+  useEffect(() => {
+    if (uploadedFile) {
+      loadVideoFile(uploadedFile);
+    }
+  }, [uploadedFile]);
+
+  // Video File Processing & Returning to Live Camera
   const loadVideoFile = (file: File) => {
     stopCamera();
     if (videoUrlRef.current) {
@@ -289,6 +270,7 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
     setUploadedFileName(file.name);
     setHasUploadedVideo(true);
     setIsVideoPaused(false);
+    setSource('upload');
 
     if (videoRef.current) {
       videoRef.current.srcObject = null;
@@ -296,43 +278,30 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
       videoRef.current.loop = true;
       videoRef.current.muted = true;
       videoRef.current.onloadedmetadata = () => {
-        videoRef.current?.play();
+        videoRef.current?.play().catch((playErr) => console.warn('Video play error:', playErr));
       };
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      loadVideoFile(file);
+  const returnToLiveCamera = () => {
+    if (videoUrlRef.current) {
+      URL.revokeObjectURL(videoUrlRef.current);
+      videoUrlRef.current = null;
     }
-  };
-
-  // Drag and drop handlers
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('video/')) {
-      loadVideoFile(file);
+    setHasUploadedVideo(false);
+    setUploadedFileName(null);
+    setSource('webcam');
+    if (onClearUploadedFile) {
+      onClearUploadedFile();
     }
+    startCamera();
   };
 
   // Toggle video playback for uploaded video
   const toggleVideoPlayback = () => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
-      videoRef.current.play();
+      videoRef.current.play().catch(() => {});
       setIsVideoPaused(false);
     } else {
       videoRef.current.pause();
@@ -343,7 +312,7 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
   const restartVideo = () => {
     if (!videoRef.current) return;
     videoRef.current.currentTime = 0;
-    videoRef.current.play();
+    videoRef.current.play().catch(() => {});
     setIsVideoPaused(false);
   };
 
@@ -743,99 +712,162 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
   };
 
   return (
-    <div className="w-full h-full flex flex-col overflow-hidden text-white select-none">
-      {/* TOP BAR: TWO SECTIONS (UPLOAD VIDEO & WEBCAM) + REALTIME CONTROLS */}
-      <div className="shrink-0 px-3 pt-2 pb-1.5 flex items-center justify-between border-b border-white/10 gap-2">
-        {/* Source Toggle Pills: Only Two Options as requested */}
-        <div className="flex items-center gap-1 p-0.5 rounded-xl bg-black/40 border border-white/15">
-          {/* 1. Primary Option: Upload Video */}
-          <button
-            type="button"
-            onClick={() => handleSelectSource('upload')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
-              source === 'upload'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'text-white/70 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Upload Video</span>
-          </button>
+    <div className="relative w-full h-full min-h-0 flex-1 overflow-hidden rounded-2xl bg-neutral-950 border border-white/20 select-none shadow-inner flex items-center justify-center">
+      {/* 1. CAMERA / VIDEO FEED + MEDIAPIPE CANVAS */}
+      <div
+        className={`relative w-full h-full flex items-center justify-center overflow-hidden ${
+          source === 'webcam' && isFlipped ? 'scale-x-[-1]' : ''
+        }`}
+      >
+        <video
+          ref={videoRef}
+          playsInline={true}
+          autoPlay={true}
+          muted={true}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full object-cover pointer-events-none z-10"
+        />
+      </div>
 
-          {/* 2. Secondary Option: Webcam */}
+      {/* 2. CAMERA PERMISSION / OFF / ERROR OVERLAY (WEBCAM MODE) */}
+      {source === 'webcam' && (!isCameraActive || cameraError) && (
+        <div className="absolute inset-0 z-30 bg-black/85 backdrop-blur-md p-4 flex flex-col items-center justify-center text-center">
+          <CameraOff className="w-9 h-9 text-rose-400 mb-2" />
+          <h4 className="text-sm font-bold text-white mb-1">
+            {cameraError ? 'Camera Access Notice' : 'Camera is Inactive'}
+          </h4>
+          <p className="text-xs text-rose-200/90 font-medium max-w-xs leading-relaxed mb-3">
+            {cameraError || 'Turn on your camera to start real-time ASL sign detection with MediaPipe AI.'}
+          </p>
           <button
             type="button"
-            onClick={() => handleSelectSource('webcam')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
-              source === 'webcam'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'text-white/70 hover:text-white hover:bg-white/10'
-            }`}
+            onClick={startCamera}
+            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-semibold text-white transition flex items-center gap-2 shadow-lg active:scale-95"
           >
-            <Camera className="w-3.5 h-3.5" />
-            <span>Webcam</span>
+            <Camera className="w-4 h-4" />
+            <span>Start Camera</span>
           </button>
         </div>
+      )}
 
-        {/* Hidden File Input for Video Upload */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="video/*"
-          className="hidden"
-          onChange={handleFileUpload}
-        />
-
-        {/* Real-time Status Badges & Controls */}
-        <div className="flex items-center gap-2">
-          {/* If Webcam active: show flip/mirror perspective toggle and camera toggle */}
-          {source === 'webcam' && (
+      {/* 3. TOP FLOATING HUD CONTROLS BAR */}
+      <div className="absolute top-2.5 inset-x-2.5 z-20 flex items-center justify-between pointer-events-none gap-2">
+        {/* TOP-LEFT CONTROLS: Camera on/off, Mirrored toggle, FPS, Video controls */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {source === 'webcam' ? (
             <>
-              <button
-                type="button"
-                onClick={() => setIsFlipped(!isFlipped)}
-                title={isFlipped ? 'Webcam Mirrored (User Perspective)' : 'Webcam Standard (Unflipped)'}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-medium transition ${
-                  isFlipped
-                    ? 'bg-purple-600/50 border-purple-400 text-white'
-                    : 'bg-white/10 border-white/20 text-white/70 hover:text-white'
-                }`}
-              >
-                <FlipHorizontal className="w-3 h-3" />
-                <span className="hidden sm:inline">{isFlipped ? 'Mirrored' : 'Inverted'}</span>
-              </button>
-
+              {/* Camera On/Off Toggle */}
               <button
                 type="button"
                 onClick={toggleCamera}
                 title={isCameraActive ? 'Turn Off Camera' : 'Turn On Camera'}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-medium transition ${
+                className={`pointer-events-auto flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-semibold backdrop-blur-md transition-all shadow-md active:scale-95 ${
                   isCameraActive
-                    ? 'bg-emerald-600/70 border-emerald-400 text-white'
-                    : 'bg-rose-600/70 border-rose-400 text-white'
+                    ? 'bg-emerald-600/80 border-emerald-400/80 text-white'
+                    : 'bg-rose-600/80 border-rose-400/80 text-white'
                 }`}
               >
-                {isCameraActive ? <Camera className="w-3 h-3" /> : <CameraOff className="w-3 h-3" />}
+                {isCameraActive ? <Camera className="w-3.5 h-3.5" /> : <CameraOff className="w-3.5 h-3.5" />}
                 <span>{isCameraActive ? 'Active' : 'Off'}</span>
               </button>
+
+              {/* Mirrored Perspective Toggle */}
+              <button
+                type="button"
+                onClick={() => setIsFlipped(!isFlipped)}
+                title={isFlipped ? 'Webcam Mirrored (User Perspective)' : 'Webcam Standard'}
+                className={`pointer-events-auto flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-medium backdrop-blur-md transition-all shadow-md active:scale-95 ${
+                  isFlipped
+                    ? 'bg-purple-600/70 border-purple-400 text-white'
+                    : 'bg-black/60 border-white/20 text-white/80 hover:text-white'
+                }`}
+              >
+                <FlipHorizontal className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{isFlipped ? 'Mirrored' : 'Standard'}</span>
+              </button>
             </>
+          ) : (
+            /* Video Playback Controls when file is uploaded */
+            <div className="pointer-events-auto flex items-center gap-1 bg-black/75 backdrop-blur-md px-2 py-1 rounded-xl border border-white/20 shadow-md">
+              <button
+                type="button"
+                onClick={toggleVideoPlayback}
+                className="p-1 rounded-lg hover:bg-white/20 text-white transition"
+                title={isVideoPaused ? 'Play Video' : 'Pause Video'}
+              >
+                {isVideoPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                type="button"
+                onClick={restartVideo}
+                className="p-1 rounded-lg hover:bg-white/20 text-white transition"
+                title="Restart Video"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={returnToLiveCamera}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-600/80 hover:bg-purple-600 text-white text-[11px] font-semibold transition"
+                title="Return to Live Camera"
+              >
+                <Camera className="w-3 h-3" />
+                <span>Live Cam</span>
+              </button>
+            </div>
           )}
 
           {/* FPS Badge */}
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 border border-white/15 text-[10px] font-mono text-purple-200">
+          <div className="pointer-events-auto flex items-center gap-1 px-2 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-[10px] font-mono text-purple-200 shadow-md">
             <Activity className="w-3 h-3 text-emerald-400" />
             <span>{fps} FPS</span>
           </div>
+        </div>
 
-          {/* Live Coordinates display toggle */}
+        {/* TOP-RIGHT CONTROLS: Prediction, Mirror on Avatar, Coordinates HUD toggle */}
+        <div className="flex items-center gap-1.5">
+          {/* Prediction Badge */}
+          {predictedSign ? (
+            <div className="pointer-events-auto flex items-center gap-1.5 px-3 py-1 rounded-xl bg-black/80 backdrop-blur-md border border-purple-400/70 shadow-lg animate-fadeIn">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span className="text-xs font-bold text-white tracking-wider">
+                {predictedSign}
+              </span>
+              <span className="text-[10px] font-mono text-emerald-300">
+                {confidence}%
+              </span>
+            </div>
+          ) : (
+            <div className="pointer-events-auto px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/15 text-[10px] text-white/70">
+              Position hands in view
+            </div>
+          )}
+
+          {/* Mirror on Avatar Button */}
+          {predictedSign && (
+            <button
+              type="button"
+              onClick={() => onSelectWord(predictedSign)}
+              className="pointer-events-auto px-2.5 py-1 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-semibold flex items-center gap-1 shadow-lg active:scale-95 transition"
+              title="Mirror detected sign on 3D Avatar"
+            >
+              <Sparkles className="w-3 h-3 text-yellow-300" />
+              <span className="hidden sm:inline">Mirror on Avatar</span>
+            </button>
+          )}
+
+          {/* Coordinates HUD Toggle */}
           <button
             type="button"
             onClick={() => setShowCoordinates(!showCoordinates)}
-            title="Toggle Live Bone Coordinates HUD"
-            className={`p-1.5 rounded-lg border text-xs transition ${
+            title="Toggle Bone Coordinates HUD"
+            className={`pointer-events-auto p-1.5 rounded-xl border text-xs backdrop-blur-md transition shadow-md active:scale-95 ${
               showCoordinates
-                ? 'bg-purple-600/60 border-purple-400 text-white'
-                : 'bg-white/10 border-white/20 text-white/70 hover:text-white'
+                ? 'bg-purple-600/80 border-purple-400 text-white'
+                : 'bg-black/60 border-white/20 text-white/70 hover:text-white'
             }`}
           >
             <Crosshair className="w-3.5 h-3.5" />
@@ -843,300 +875,113 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
         </div>
       </div>
 
-      {/* MAIN DETECTION STAGE & COORDINATES SPLIT */}
-      <div className="flex-1 min-h-0 flex flex-col sm:flex-row overflow-hidden p-2.5 gap-2.5">
-        {/* LEFT / TOP: VIDEO & SKELETON CANVAS CONTAINER */}
-        <div className="relative flex-1 min-h-[170px] rounded-2xl bg-neutral-950 border border-white/20 overflow-hidden flex items-center justify-center shadow-inner">
-          {/* 1. If in Upload mode and NO video uploaded yet: show friendly dropzone */}
-          {source === 'upload' && !hasUploadedVideo ? (
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`w-full h-full p-4 flex flex-col items-center justify-center text-center cursor-pointer transition ${
-                isDragging
-                  ? 'bg-purple-900/30 border-2 border-dashed border-purple-400'
-                  : 'hover:bg-white/[0.04]'
-              }`}
-            >
-              <div className="w-12 h-12 rounded-2xl bg-purple-600/20 border border-purple-400/40 flex items-center justify-center mb-2 shadow-lg">
-                <Upload className="w-6 h-6 text-purple-300" />
-              </div>
-              <h4 className="text-sm font-bold text-white tracking-wide">
-                Upload ASL Sign Video
-              </h4>
-              <p className="text-xs text-white/60 mt-1 max-w-xs">
-                Drag & drop any video file or click to browse from device (MP4, WebM, MOV)
-              </p>
-              <div className="mt-3 flex items-center gap-2">
-                <span className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-xs font-semibold text-white shadow transition">
-                  Choose Video File
-                </span>
-              </div>
-            </div>
-          ) : (
-            /* 2. Active Video + MediaPipe Skeleton Canvas (Mirrored if Webcam is flipped) */
-            <div
-              className={`relative w-full h-full flex items-center justify-center overflow-hidden ${
-                source === 'webcam' && isFlipped ? 'scale-x-[-1]' : ''
-              }`}
-            >
-              <video
-                ref={videoRef}
-                playsInline={true}
-                autoPlay={true}
-                muted={true}
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-              <canvas
-                ref={canvasRef}
-                className="absolute inset-0 w-full h-full object-cover pointer-events-none z-10"
-              />
-            </div>
-          )}
+      {/* 4. FLOATING BONE COORDINATES HUD OVERLAY */}
+      {showCoordinates && (
+        <div className="absolute top-12 right-2.5 z-20 p-2.5 rounded-xl bg-black/85 backdrop-blur-md border border-white/20 flex flex-col gap-1.5 font-mono text-[9px] max-w-[200px] shadow-2xl pointer-events-auto animate-fadeIn">
+          <div className="flex items-center justify-between border-b border-white/10 pb-1">
+            <span className="font-bold text-purple-300 uppercase tracking-wide">
+              Live Bone XYZ
+            </span>
+            <span className="text-[8px] text-emerald-400">Tracked</span>
+          </div>
 
-          {/* Camera Permission / Off Overlay (Webcam Mode) */}
-          {source === 'webcam' && (!isCameraActive || cameraError) && (
-            <div className="absolute inset-0 z-20 bg-black/85 backdrop-blur-sm p-4 flex flex-col items-center justify-center text-center">
-              <CameraOff className="w-8 h-8 text-rose-400 mb-2" />
-              <p className="text-xs text-rose-200 font-medium max-w-xs leading-relaxed">
-                {cameraError || 'Camera is currently paused or inactive.'}
-              </p>
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-semibold text-white transition flex items-center gap-1.5 shadow"
-                >
-                  <Camera className="w-3.5 h-3.5" />
-                  <span>Start Camera</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSelectSource('upload')}
-                  className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-xs font-semibold text-white transition flex items-center gap-1.5 shadow"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>Use Video Upload</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Video Playback Controls Overlay for Upload Mode */}
-          {source === 'upload' && hasUploadedVideo && (
-            <div className="absolute top-2 left-2 z-20 flex items-center gap-1 bg-black/70 backdrop-blur-md px-2 py-1 rounded-xl border border-white/15">
-              <button
-                type="button"
-                onClick={toggleVideoPlayback}
-                className="p-1 rounded-md hover:bg-white/20 text-white transition"
-                title={isVideoPaused ? 'Play' : 'Pause'}
-              >
-                {isVideoPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-              </button>
-              <button
-                type="button"
-                onClick={restartVideo}
-                className="p-1 rounded-md hover:bg-white/20 text-white transition"
-                title="Restart Video"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="px-1.5 py-0.5 rounded-md hover:bg-white/20 text-[10px] text-purple-200 font-medium transition flex items-center gap-1"
-                title="Change Video"
-              >
-                <FileVideo className="w-3 h-3" />
-                <span className="truncate max-w-[90px]">{uploadedFileName || 'Change'}</span>
-              </button>
-            </div>
-          )}
-
-          {/* Floating Live Prediction HUD (Overlaid on Video) */}
-          <div className="absolute top-2 right-2 z-20 flex items-center gap-2 pointer-events-none">
-            {predictedSign ? (
-              <div className="flex items-center gap-2 px-3 py-1 rounded-xl bg-black/80 backdrop-blur-md border border-purple-400/50 shadow-lg animate-fadeIn">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span className="text-xs font-bold text-white tracking-wider">
-                  {predictedSign}
-                </span>
-                <span className="text-[10px] font-mono text-emerald-300">
-                  {confidence}%
-                </span>
+          {/* Right Hand Coords */}
+          <div className="flex flex-col gap-0.5">
+            <span className="font-semibold text-emerald-400 flex items-center gap-1 text-[9px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Right Hand {rightHandCoords ? 'Tracked' : 'Searching...'}
+            </span>
+            {rightHandCoords ? (
+              <div className="grid grid-cols-2 gap-x-1 text-white/80 text-[8px] pl-1.5 border-l border-emerald-500/40">
+                <div>W: {rightHandCoords.wrist.x.toFixed(2)}, {rightHandCoords.wrist.y.toFixed(2)}</div>
+                <div>Idx: {rightHandCoords.indexTip.x.toFixed(2)}, {rightHandCoords.indexTip.y.toFixed(2)}</div>
               </div>
             ) : (
-              <div className="px-2.5 py-0.5 rounded-lg bg-black/60 backdrop-blur-xs border border-white/10 text-[10px] text-white/70">
-                Position hands in view
-              </div>
-            )}
-
-            {/* Mirror on 3D Avatar Quick Action */}
-            {predictedSign && (
-              <button
-                type="button"
-                onClick={() => onSelectWord(predictedSign)}
-                className="pointer-events-auto px-2.5 py-1 rounded-xl bg-purple-600/90 hover:bg-purple-500 text-white text-[11px] font-semibold flex items-center gap-1 shadow-md active:scale-95 transition"
-              >
-                <Sparkles className="w-3 h-3 text-yellow-300" />
-                <span>Mirror on Avatar</span>
-              </button>
+              <span className="text-[8px] text-white/40 italic pl-1.5">Waiting for hand...</span>
             )}
           </div>
 
-          {/* Tracking Legend Overlay at Bottom */}
-          <div className="absolute bottom-1.5 left-2 right-2 z-20 flex items-center justify-between pointer-events-none text-[9px] font-mono text-white/75 bg-black/60 px-2 py-0.5 rounded-md backdrop-blur-xs">
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#22d3ee]" /> Left Hand
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#34d399]" /> Right Hand
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#ec4899]" /> Body
-              </span>
-            </div>
-            <span>
-              {source === 'webcam' && isFlipped ? 'Mirrored Perspective' : 'Standard View'}
+          {/* Left Hand Coords */}
+          <div className="flex flex-col gap-0.5 pt-0.5 border-t border-white/10">
+            <span className="font-semibold text-cyan-400 flex items-center gap-1 text-[9px]">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+              Left Hand {leftHandCoords ? 'Tracked' : 'Searching...'}
             </span>
+            {leftHandCoords ? (
+              <div className="grid grid-cols-2 gap-x-1 text-white/80 text-[8px] pl-1.5 border-l border-cyan-500/40">
+                <div>W: {leftHandCoords.wrist.x.toFixed(2)}, {leftHandCoords.wrist.y.toFixed(2)}</div>
+                <div>Idx: {leftHandCoords.indexTip.x.toFixed(2)}, {leftHandCoords.indexTip.y.toFixed(2)}</div>
+              </div>
+            ) : (
+              <span className="text-[8px] text-white/40 italic pl-1.5">Waiting for hand...</span>
+            )}
           </div>
         </div>
+      )}
 
-        {/* RIGHT / BOTTOM: EXACT COORDINATES & PREDICTION HUD */}
-        <div className="w-full sm:w-[220px] shrink-0 flex flex-col gap-2 overflow-y-auto no-scrollbar">
-          {/* Live Subtitle Caption Box */}
-          <div className="p-2.5 rounded-xl bg-white/[0.08] border border-white/15 flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1">
-                <Sparkles className="w-3 h-3" />
-                <span>Live Caption Subtitles</span>
+      {/* 5. FLOATING LIVE CAPTION SUBTITLES STRIP */}
+      <div className="absolute bottom-2 inset-x-2 z-20 flex flex-col gap-1 pointer-events-none">
+        <div className="pointer-events-auto flex items-center justify-between px-3 py-1.5 rounded-xl bg-black/80 backdrop-blur-md border border-white/20 shadow-2xl gap-2">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-x-auto no-scrollbar py-0.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300 shrink-0 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-purple-300" />
+              <span className="hidden sm:inline">Subtitles:</span>
+            </span>
+            {captionHistory.length > 0 ? (
+              captionHistory.map((word, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => onSelectWord(word)}
+                  title={`Click to mirror "${word}" on avatar`}
+                  className="shrink-0 px-2 py-0.5 rounded-lg bg-purple-600/80 hover:bg-purple-500 border border-purple-400/40 text-[11px] font-bold text-white tracking-wide shadow transition active:scale-95"
+                >
+                  {word}
+                </button>
+              ))
+            ) : (
+              <span className="text-[11px] text-white/50 italic truncate">
+                Live captions appear here as you sign...
               </span>
-              {captionHistory.length > 0 && (
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={handleCopyCaption}
-                    className="text-[10px] text-white/60 hover:text-white p-0.5"
-                    title="Copy subtitles"
-                  >
-                    {copiedCaption ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCaptionHistory([])}
-                    className="text-[10px] text-white/60 hover:text-white p-0.5"
-                    title="Clear"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="min-h-[38px] p-1.5 rounded-lg bg-black/40 border border-white/10 text-xs font-medium text-white flex flex-wrap gap-1 items-center">
-              {captionHistory.length > 0 ? (
-                captionHistory.map((word, idx) => (
-                  <span
-                    key={idx}
-                    className="px-1.5 py-0.5 rounded bg-purple-900/60 border border-purple-400/40 text-[11px] font-bold text-white tracking-wide animate-fadeIn"
-                  >
-                    {word}
-                  </span>
-                ))
-              ) : (
-                <span className="text-[11px] text-white/40 italic">
-                  Captions appear here as you sign...
-                </span>
-              )}
-            </div>
+            )}
           </div>
 
-          {/* EXACT COORDINATES TELEMETRY HUD */}
-          {showCoordinates && (
-            <div className="p-2.5 rounded-xl bg-black/50 border border-white/15 flex flex-col gap-2 font-mono text-[10px]">
-              <div className="flex items-center justify-between border-b border-white/10 pb-1">
-                <span className="font-bold text-purple-300 uppercase tracking-wide">
-                  Live Bone Coordinates
-                </span>
-                <span className="text-[9px] text-emerald-400">XYZ Active</span>
-              </div>
-
-              {/* Right Hand Coords */}
-              <div className="flex flex-col gap-0.5">
-                <span className="font-semibold text-emerald-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  Right Hand {rightHandCoords ? 'Tracked' : 'Searching...'}
-                </span>
-                {rightHandCoords ? (
-                  <div className="grid grid-cols-2 gap-x-1 gap-y-0.5 text-white/80 text-[9px] pl-2 border-l border-emerald-500/30">
-                    <div>
-                      W: {rightHandCoords.wrist.x.toFixed(2)}, {rightHandCoords.wrist.y.toFixed(2)}
-                    </div>
-                    <div>
-                      Idx: {rightHandCoords.indexTip.x.toFixed(2)}, {rightHandCoords.indexTip.y.toFixed(2)}
-                    </div>
-                    <div>
-                      Thb: {rightHandCoords.thumbTip.x.toFixed(2)}, {rightHandCoords.thumbTip.y.toFixed(2)}
-                    </div>
-                    <div>
-                      Pnk: {rightHandCoords.pinkyTip.x.toFixed(2)}, {rightHandCoords.pinkyTip.y.toFixed(2)}
-                    </div>
-                  </div>
-                ) : (
-                  <span className="text-[9px] text-white/40 italic pl-2">Waiting for hand...</span>
-                )}
-              </div>
-
-              {/* Left Hand Coords */}
-              <div className="flex flex-col gap-0.5 pt-1 border-t border-white/10">
-                <span className="font-semibold text-cyan-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                  Left Hand {leftHandCoords ? 'Tracked' : 'Searching...'}
-                </span>
-                {leftHandCoords ? (
-                  <div className="grid grid-cols-2 gap-x-1 gap-y-0.5 text-white/80 text-[9px] pl-2 border-l border-cyan-500/30">
-                    <div>
-                      W: {leftHandCoords.wrist.x.toFixed(2)}, {leftHandCoords.wrist.y.toFixed(2)}
-                    </div>
-                    <div>
-                      Idx: {leftHandCoords.indexTip.x.toFixed(2)}, {leftHandCoords.indexTip.y.toFixed(2)}
-                    </div>
-                    <div>
-                      Thb: {leftHandCoords.thumbTip.x.toFixed(2)}, {leftHandCoords.thumbTip.y.toFixed(2)}
-                    </div>
-                    <div>
-                      Pnk: {leftHandCoords.pinkyTip.x.toFixed(2)}, {leftHandCoords.pinkyTip.y.toFixed(2)}
-                    </div>
-                  </div>
-                ) : (
-                  <span className="text-[9px] text-white/40 italic pl-2">Waiting for hand...</span>
-                )}
-              </div>
-
-              {/* Upper Body & Arms */}
-              {bodyCoords && bodyCoords.leftShoulder && (
-                <div className="flex flex-col gap-0.5 pt-1 border-t border-white/10">
-                  <span className="font-semibold text-pink-400 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-pink-400" />
-                    Shoulders & Arms
-                  </span>
-                  <div className="text-[9px] text-white/80 pl-2 border-l border-pink-500/30">
-                    <div>
-                      Shoulder L: {bodyCoords.leftShoulder.x.toFixed(2)}, R:{' '}
-                      {bodyCoords.rightShoulder?.x.toFixed(2)}
-                    </div>
-                    <div>
-                      Elbow L: {bodyCoords.leftElbow?.x.toFixed(2)}, R:{' '}
-                      {bodyCoords.rightElbow?.x.toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-              )}
+          {captionHistory.length > 0 && (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={handleCopyCaption}
+                className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition"
+                title="Copy subtitles"
+              >
+                {copiedCaption ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setCaptionHistory([])}
+                className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition"
+                title="Clear subtitles"
+              >
+                <RotateCcw className="w-3 h-3" />
+              </button>
             </div>
           )}
+        </div>
+
+        {/* Tracking Legend */}
+        <div className="flex items-center justify-between px-2.5 py-0.5 rounded-md bg-black/60 backdrop-blur-xs text-[8.5px] font-mono text-white/75">
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#22d3ee]" /> Left Hand
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#34d399]" /> Right Hand
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ec4899]" /> Body
+            </span>
+          </div>
+          <span>{source === 'webcam' && isFlipped ? 'Mirrored View' : 'Standard View'}</span>
         </div>
       </div>
     </div>

@@ -30,6 +30,8 @@ interface BottomHalfDrawerProps {
   audioLevel: number;
   interimText: string;
   transcriptHistory: TranscriptItem[];
+  uploadedVideoFile?: File | null;
+  onClearUploadedFile?: () => void;
 }
 
 export const BottomHalfDrawer: React.FC<BottomHalfDrawerProps> = ({
@@ -48,6 +50,8 @@ export const BottomHalfDrawer: React.FC<BottomHalfDrawerProps> = ({
   audioLevel,
   interimText,
   transcriptHistory,
+  uploadedVideoFile,
+  onClearUploadedFile,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [category, setCategory] = useState('all');
@@ -415,10 +419,12 @@ export const BottomHalfDrawer: React.FC<BottomHalfDrawerProps> = ({
 
         {/* 3. AI SIGN RECOGNITION & TRAINING MODE (POWERED BY MEDIAPIPE) */}
         {mode === 'ai' && (
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden p-1.5 sm:p-2">
             <AiSignTrainingView
               onSelectWord={onSelectWord}
               currentSignName={currentSignName}
+              uploadedFile={uploadedVideoFile}
+              onClearUploadedFile={onClearUploadedFile}
             />
           </div>
         )}

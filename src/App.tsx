@@ -25,7 +25,7 @@ import {
   GestureKeyframe,
   StageBackground,
 } from './types';
-import { Sparkles, Mic, MicOff, Send, Eye, Activity, AlertTriangle } from 'lucide-react';
+import { Sparkles, Mic, MicOff, Send, Eye, Activity, AlertTriangle, Upload } from 'lucide-react';
 
 export default function App() {
   const isSecureContext = typeof window !== 'undefined' ? window.isSecureContext : true;
@@ -72,6 +72,10 @@ export default function App() {
     char?: string;
   }[]>([]);
   const [currentSignName, setCurrentSignName] = useState<string | null>(null);
+
+  // AI Sign Recognition Uploaded Video State
+  const [aiUploadedVideoFile, setAiUploadedVideoFile] = useState<File | null>(null);
+  const aiVideoFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // StudioGalt Live Telemetry state
   const [liveCoordinates, setLiveCoordinates] = useState<LiveMocapCoordinates | null>(null);
@@ -607,6 +611,52 @@ export default function App() {
           </div>
         </div>
 
+        {/* FLOATING "UPLOAD VIDEO" BUTTON FOR AI TRAIN MODE (UPPER HALF, SIDE OF SCREEN, VISIBLE ONLY IN AI MODE) */}
+        {activeTab === 'ai' && (
+          <div
+            id="floating-ai-upload-button"
+            className="fixed top-20 left-4 sm:left-6 z-30 pointer-events-auto flex items-center animate-fadeIn"
+          >
+            <input
+              ref={aiVideoFileInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  setAiUploadedVideoFile(file);
+                }
+                e.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => aiVideoFileInputRef.current?.click()}
+              title={
+                aiUploadedVideoFile
+                  ? `Video loaded: ${aiUploadedVideoFile.name}. Click to change video`
+                  : 'Upload Video File for AI ASL Recognition'
+              }
+              aria-label="Upload video for AI Sign Recognition"
+              className="group flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-black/60 hover:bg-black/80 border border-purple-400/40 hover:border-purple-400/80 text-white shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-all duration-200 active:scale-95 ring-1 ring-white/10 hover:ring-purple-400/30"
+            >
+              <div className="w-7 h-7 rounded-xl bg-purple-600/70 border border-purple-300/40 flex items-center justify-center text-white shadow-sm group-hover:bg-purple-600 transition-colors">
+                <Upload className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col text-left">
+                <span className="text-xs font-bold tracking-wide text-white flex items-center gap-1">
+                  <span>{aiUploadedVideoFile ? 'Change Video' : 'Upload Video'}</span>
+                  {aiUploadedVideoFile && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                </span>
+                <span className="text-[10px] text-purple-200/75 truncate max-w-[110px]">
+                  {aiUploadedVideoFile ? aiUploadedVideoFile.name : 'MP4, WebM, MOV'}
+                </span>
+              </div>
+            </button>
+          </div>
+        )}
+
         {/* REALTIME TRANSCRIPTION OVERLAY FIELD (Right above bottom dock, invisible background, white text) */}
         <div
           id="realtime-transcription-field"
@@ -621,7 +671,7 @@ export default function App() {
                 : activeTab === 'dictionary'
                 ? 390
                 : activeTab === 'ai'
-                ? 440
+                ? 470
                 : 165
             }px + max(14px, env(safe-area-inset-bottom)) + 12px)`,
             left: '50%',
@@ -787,19 +837,19 @@ export default function App() {
             left: '50%',
             transform: 'translateX(-50%)',
             width: activeTab ? 'calc(100% - 1.5rem)' : 'calc(100% - 2rem)',
-            maxWidth: activeTab ? '560px' : '340px',
+            maxWidth: activeTab ? (activeTab === 'ai' ? '680px' : '560px') : '340px',
             height: `${
               activeTab === 'skins'
                 ? 330
                 : activeTab === 'dictionary'
                 ? 390
                 : activeTab === 'ai'
-                ? 440
+                ? 470
                 : activeTab === 'play'
                 ? 165
                 : 56
             }px`,
-            maxHeight: 'min(calc(100dvh - 68px), 490px)',
+            maxHeight: 'min(calc(100dvh - 68px), 520px)',
             transition: 'height 360ms cubic-bezier(0.16, 1, 0.3, 1), max-width 360ms ease, width 360ms ease, border-radius 360ms ease',
             willChange: 'height, width',
           }}
@@ -893,6 +943,8 @@ export default function App() {
                       audioLevel={audioLevel}
                       interimText={interimText}
                       transcriptHistory={transcriptHistory}
+                      uploadedVideoFile={aiUploadedVideoFile}
+                      onClearUploadedFile={() => setAiUploadedVideoFile(null)}
                     />
                   </div>
                 </div>
