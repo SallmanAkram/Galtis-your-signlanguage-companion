@@ -3,7 +3,7 @@ import { Search, Check, Sparkles, User, Shirt, Volume2, RotateCcw } from 'lucide
 import { ALL_SIGNS } from '../data/aslDictionary';
 import { STUDIO_GALT_DICTIONARY } from '../data/studioGaltDictionary';
 import { GaltisModelSource } from './GaltisOriginalAvatar';
-import { TranscriptItem, StageBackground } from '../types';
+import { TranscriptItem, StageBackground, GestureKeyframe } from '../types';
 import { BottomNavBar, ActiveTab } from './BottomNavBar';
 import { AiSignTrainingView } from './AiSignTrainingView';
 
@@ -32,6 +32,7 @@ interface BottomHalfDrawerProps {
   transcriptHistory: TranscriptItem[];
   uploadedVideoFile?: File | null;
   onClearUploadedFile?: () => void;
+  onLivePoseUpdate?: (pose: GestureKeyframe | null) => void;
 }
 
 export const BottomHalfDrawer: React.FC<BottomHalfDrawerProps> = ({
@@ -52,6 +53,7 @@ export const BottomHalfDrawer: React.FC<BottomHalfDrawerProps> = ({
   transcriptHistory,
   uploadedVideoFile,
   onClearUploadedFile,
+  onLivePoseUpdate,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [category, setCategory] = useState('all');
@@ -425,6 +427,7 @@ export const BottomHalfDrawer: React.FC<BottomHalfDrawerProps> = ({
               currentSignName={currentSignName}
               uploadedFile={uploadedVideoFile}
               onClearUploadedFile={onClearUploadedFile}
+              onLivePoseUpdate={onLivePoseUpdate}
             />
           </div>
         )}

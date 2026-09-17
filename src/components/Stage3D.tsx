@@ -26,6 +26,7 @@ interface Stage3DProps {
   avatarSkin?: GaltisModelSource;
   stageBackground?: StageBackground;
   isDictionaryOpen?: boolean;
+  liveTrackingKeyframeRef?: React.MutableRefObject<GestureKeyframe | null>;
 }
 
 export const Stage3D: React.FC<Stage3DProps> = ({
@@ -42,6 +43,7 @@ export const Stage3D: React.FC<Stage3DProps> = ({
   avatarSkin = 'full_mesh',
   stageBackground = 'mist',
   isDictionaryOpen = false,
+  liveTrackingKeyframeRef,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const characterRef = useRef<Character3D | null>(null);
@@ -72,6 +74,8 @@ export const Stage3D: React.FC<Stage3DProps> = ({
   const isDraggingRef = useRef<boolean>(false);
   const previousMousePositionRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const orbitAngleRef = useRef<{ theta: number; phi: number }>({ theta: 0, phi: 0 });
+  const wasLiveImitatingRef = useRef<boolean>(false);
+  const lastLivePoseTimeRef = useRef<number>(0);
 
   const liveProps = useRef({
     companion,
@@ -229,11 +233,34 @@ export const Stage3D: React.FC<Stage3DProps> = ({
       // Update Active Character / Avatar
       const isOriginal = activeCompanion.avatarVariant === 'galtis_original';
 
+      // Real-time live motion capture imitation (MediaPipe Vision -> Avatar Rig)
+      const liveTrackingPose = liveTrackingKeyframeRef?.current;
+      const nowMs = performance.now();
+      if (liveTrackingPose && !activeSignItemRef.current) {
+        lastLivePoseTimeRef.current = nowMs;
+        wasLiveImitatingRef.current = true;
+        if (isOriginal && galtisAvatarRef.current) {
+          galtisAvatarRef.current.applyPose(liveTrackingPose);
+        } else if (characterRef.current) {
+          characterRef.current.applyPose(liveTrackingPose);
+        }
+      } else if (wasLiveImitatingRef.current) {
+        // Hold last tracking pose for 350ms to gracefully bridge any single-frame detection drops
+        if (nowMs - lastLivePoseTimeRef.current > 350) {
+          wasLiveImitatingRef.current = false;
+          if (isOriginal && galtisAvatarRef.current) {
+            galtisAvatarRef.current.resetToReady();
+          } else if (characterRef.current) {
+            characterRef.current.resetToReady();
+          }
+        }
+      }
+
       if (isOriginal && galtisAvatarRef.current) {
         galtisAvatarRef.current.update(delta, elapsedTime, activeSpeed || 1.0);
         // Feed live telemetry coordinates
         if (activeOnCoords && Math.random() < 0.35) {
-          const signName = activeSignItemRef.current?.name || 'GALTIS';
+          const signName = activeSignItemRef.current?.name || (liveTrackingPose ? 'LIVE MOCAP' : 'GALTIS');
           const progress = (currentKeyframeIdxRef.current + 1) / 3;
           activeOnCoords(galtisAvatarRef.current.getLiveCoordinates(signName, progress));
         }

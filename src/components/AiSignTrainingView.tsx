@@ -13,12 +13,15 @@ import {
   FlipHorizontal,
 } from 'lucide-react';
 import { FilesetResolver, HandLandmarker, PoseLandmarker } from '@mediapipe/tasks-vision';
+import { solveMediaPipeToRigPose } from '../utils/mocapSolver';
+import { GestureKeyframe } from '../types';
 
 interface AiSignTrainingViewProps {
   onSelectWord: (word: string) => void;
   currentSignName?: string | null;
   uploadedFile?: File | null;
   onClearUploadedFile?: () => void;
+  onLivePoseUpdate?: (pose: GestureKeyframe | null) => void;
 }
 
 type InputSource = 'upload' | 'webcam';
@@ -55,10 +58,12 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
   onSelectWord,
   uploadedFile,
   onClearUploadedFile,
+  onLivePoseUpdate,
 }) => {
   // Primary mode is 'webcam' as requested
   const [source, setSource] = useState<InputSource>('webcam');
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isLiveImitationActive, setIsLiveImitationActive] = useState(true);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [modelStatus, setModelStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [statusMessage, setStatusMessage] = useState('Initializing MediaPipe Vision AI...');
@@ -97,6 +102,8 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
   const frameCountRef = useRef<number>(0);
   const fpsTimerRef = useRef<number>(performance.now());
   const lastDetectedSignRef = useRef<{ sign: string; time: number } | null>(null);
+  const onLivePoseUpdateRef = useRef(onLivePoseUpdate);
+  onLivePoseUpdateRef.current = onLivePoseUpdate;
 
   // 1. Initialize MediaPipe Models
   useEffect(() => {
@@ -112,29 +119,40 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
         if (!isMounted) return;
 
         setStatusMessage('Loading Hand & Pose Landmark Models...');
-        const [handLandmarker, poseLandmarker] = await Promise.all([
-          HandLandmarker.createFromOptions(vision, {
-            baseOptions: {
-              modelAssetPath:
-                'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
-              delegate: 'GPU',
-            },
-            runningMode: 'VIDEO',
-            numHands: 2,
-          }),
-          PoseLandmarker.createFromOptions(vision, {
-            baseOptions: {
-              modelAssetPath:
-                'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
-              delegate: 'GPU',
-            },
-            runningMode: 'VIDEO',
-            numPoses: 1,
-          }),
-        ]);
+        const loadModels = async (delegate: 'GPU' | 'CPU') => {
+          return Promise.all([
+            HandLandmarker.createFromOptions(vision, {
+              baseOptions: {
+                modelAssetPath:
+                  'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+                delegate,
+              },
+              runningMode: 'VIDEO',
+              numHands: 2,
+            }),
+            PoseLandmarker.createFromOptions(vision, {
+              baseOptions: {
+                modelAssetPath:
+                  'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+                delegate,
+              },
+              runningMode: 'VIDEO',
+              numPoses: 1,
+            }),
+          ]);
+        };
+
+        let models;
+        try {
+          models = await loadModels('GPU');
+        } catch (gpuErr) {
+          console.warn('GPU delegate failed for MediaPipe Vision, falling back to CPU:', gpuErr);
+          models = await loadModels('CPU');
+        }
 
         if (!isMounted) return;
 
+        const [handLandmarker, poseLandmarker] = models;
         handLandmarkerRef.current = handLandmarker;
         poseLandmarkerRef.current = poseLandmarker;
         setModelStatus('ready');
@@ -235,6 +253,7 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
       videoRef.current.srcObject = null;
     }
     setIsCameraActive(false);
+    onLivePoseUpdate?.(null);
   };
 
   const toggleCamera = () => {
@@ -690,12 +709,30 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
       setBodyCoords(null);
     }
 
+    // 8. Real-Time 3D Avatar Live Motion Capture Imitation
+    if (isLiveImitationActive && onLivePoseUpdateRef.current) {
+      try {
+        const mocapResult = solveMediaPipeToRigPose(
+          poseResults?.landmarks?.[0] || null,
+          handResults,
+          source === 'webcam' ? isFlipped : false
+        );
+        if (mocapResult && mocapResult.keyframe) {
+          onLivePoseUpdateRef.current(mocapResult.keyframe);
+        } else {
+          onLivePoseUpdateRef.current(null);
+        }
+      } catch (mocapErr) {
+        console.warn('Live mocap solve error:', mocapErr);
+      }
+    }
+
     if (ctx) {
       drawLandmarks(ctx, canvas.width, canvas.height, handResults, poseResults);
     }
 
     animFrameIdRef.current = requestAnimationFrame(runDetection);
-  }, [showCoordinates, source, isFlipped]);
+  }, [showCoordinates, source, isFlipped, isLiveImitationActive]);
 
   useEffect(() => {
     animFrameIdRef.current = requestAnimationFrame(runDetection);
@@ -787,6 +824,34 @@ export const AiSignTrainingView: React.FC<AiSignTrainingViewProps> = ({
               >
                 <FlipHorizontal className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">{isFlipped ? 'Mirrored' : 'Standard'}</span>
+              </button>
+
+              {/* Real-time 3D Avatar Imitation Mode Toggle */}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !isLiveImitationActive;
+                  setIsLiveImitationActive(next);
+                  if (!next && onLivePoseUpdate) {
+                    onLivePoseUpdate(null);
+                  }
+                }}
+                title={
+                  isLiveImitationActive
+                    ? 'Live Avatar Imitation ACTIVE: 3D avatar mirrors your body, arms, and fingers in real-time (Click to pause)'
+                    : 'Click to enable real-time 3D Avatar body imitation'
+                }
+                className={`pointer-events-auto flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-semibold backdrop-blur-md transition-all shadow-md active:scale-95 ${
+                  isLiveImitationActive
+                    ? 'bg-teal-600/85 border-teal-300 text-white shadow-[0_0_12px_rgba(45,212,191,0.4)]'
+                    : 'bg-black/60 border-white/20 text-white/70 hover:text-white'
+                }`}
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${isLiveImitationActive ? 'text-teal-200 animate-pulse' : 'text-white/60'}`} />
+                <span>Imitate</span>
+                {isLiveImitationActive && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-300 animate-ping" />
+                )}
               </button>
             </>
           ) : (

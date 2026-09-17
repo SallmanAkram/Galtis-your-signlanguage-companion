@@ -77,6 +77,9 @@ export default function App() {
   const [aiUploadedVideoFile, setAiUploadedVideoFile] = useState<File | null>(null);
   const aiVideoFileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Live MoCap Avatar Teleoperation/Imitation Keyframe ref (direct 60fps link without re-renders)
+  const liveTrackingPoseRef = useRef<GestureKeyframe | null>(null);
+
   // StudioGalt Live Telemetry state
   const [liveCoordinates, setLiveCoordinates] = useState<LiveMocapCoordinates | null>(null);
   const [selectedStudioGaltWord, setSelectedStudioGaltWord] = useState<StudioGaltWordEntry | null>(
@@ -500,6 +503,7 @@ export default function App() {
               showSkeletalJoints={settings.showSkeletalJoints}
               onCoordinatesUpdate={setLiveCoordinates}
               manualKeyposeKeyframe={manualKeyframe}
+              liveTrackingKeyframeRef={liveTrackingPoseRef}
               avatarSkin={avatarSkin}
               stageBackground={stageBackground}
               isDictionaryOpen={isDictionaryActive}
@@ -611,11 +615,15 @@ export default function App() {
           </div>
         </div>
 
-        {/* FLOATING "UPLOAD VIDEO" BUTTON FOR AI TRAIN MODE (UPPER HALF, SIDE OF SCREEN, VISIBLE ONLY IN AI MODE) */}
+        {/* FLOATING "UPLOAD VIDEO" BUTTON FOR AI TRAIN MODE (UPPER HALF, SIDE OF SCREEN CLOSE TO AVATAR) */}
         {activeTab === 'ai' && (
           <div
             id="floating-ai-upload-button"
-            className="fixed top-20 left-4 sm:left-6 z-30 pointer-events-auto flex items-center animate-fadeIn"
+            className="fixed z-30 pointer-events-auto flex items-center animate-fadeIn"
+            style={{
+              top: '76px',
+              left: 'max(16px, calc(50% - min(290px, 45vw)))',
+            }}
           >
             <input
               ref={aiVideoFileInputRef}
@@ -945,6 +953,9 @@ export default function App() {
                       transcriptHistory={transcriptHistory}
                       uploadedVideoFile={aiUploadedVideoFile}
                       onClearUploadedFile={() => setAiUploadedVideoFile(null)}
+                      onLivePoseUpdate={(pose) => {
+                        liveTrackingPoseRef.current = pose;
+                      }}
                     />
                   </div>
                 </div>

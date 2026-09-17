@@ -90,6 +90,7 @@ export class GaltisOriginalAvatar {
   // Default initial bone rotations & positions for clean rest blending
   private restRotations: Map<string, THREE.Quaternion> = new Map();
   private restPositions: Map<string, THREE.Vector3> = new Map();
+  private restEulers: Map<string, THREE.Euler> = new Map();
 
   // Poses for procedural fallback
   public currentLeftPose: HandPose = { ...REST_POSE_LEFT };
@@ -136,6 +137,7 @@ export class GaltisOriginalAvatar {
     this.boneMap.clear();
     this.restRotations.clear();
     this.restPositions.clear();
+    this.restEulers.clear();
     this.actionsCache.clear();
     if (this.mixer) {
       this.mixer.stopAllAction();
@@ -510,6 +512,7 @@ export class GaltisOriginalAvatar {
     skelBones.forEach((bone) => {
       this.restRotations.set(bone.name, bone.quaternion.clone());
       this.restPositions.set(bone.name, bone.position.clone());
+      this.restEulers.set(bone.name, bone.rotation.clone());
     });
   }
 
@@ -616,13 +619,13 @@ export class GaltisOriginalAvatar {
   public applyPose(keyframe: GestureKeyframe) {
     this.hasActiveProceduralPose = true;
     if (this.activeAction && this.isMocapActionPlaying) {
-      this.activeAction.fadeOut(0.2);
+      this.activeAction.stop();
       this.activeAction = null;
       this.isMocapActionPlaying = false;
       this.activeMocapName = null;
     }
-    if (this.idleAction) {
-      this.idleAction.fadeOut(0.2);
+    if (this.idleAction && this.idleAction.isRunning()) {
+      this.idleAction.stop();
     }
 
     if (keyframe.rightHand) {
@@ -642,12 +645,12 @@ export class GaltisOriginalAvatar {
     this.targetLeftPose = { ...REST_POSE_LEFT };
     this.targetHeadPose = { nod: 0, tilt: 0, turn: 0 };
     if (this.activeAction) {
-      this.activeAction.fadeOut(0.25);
+      this.activeAction.stop();
       this.activeAction = null;
       this.isMocapActionPlaying = false;
       this.activeMocapName = null;
     }
-    if (this.idleAction) {
+    if (this.idleAction && !this.idleAction.isRunning()) {
       this.idleAction.reset().fadeIn(0.25).play();
     }
   }
@@ -672,7 +675,8 @@ export class GaltisOriginalAvatar {
 
     // 2. Only run procedural FK blending when a procedural pose is actively requested and no mocap clip is controlling the rig
     if (this.hasActiveProceduralPose && !this.isMocapActionPlaying) {
-      const lerpFactor = Math.min(1.0, delta * 9.5 * speedMultiplier);
+      // Fast, responsive interpolation for real-time live motion capture imitation
+      const lerpFactor = Math.min(1.0, delta * 15.0 * speedMultiplier);
 
       // Lerp pose values
       const lerpVal = (cur: number | undefined, tgt: number | undefined, def: number = 0) => {
@@ -681,6 +685,7 @@ export class GaltisOriginalAvatar {
         return c + (t - c) * lerpFactor;
       };
 
+      // Right Arm Lerping
       this.currentRightPose.shoulderX = lerpVal(this.currentRightPose.shoulderX, this.targetRightPose.shoulderX);
       this.currentRightPose.shoulderY = lerpVal(this.currentRightPose.shoulderY, this.targetRightPose.shoulderY);
       this.currentRightPose.shoulderZ = lerpVal(this.currentRightPose.shoulderZ, this.targetRightPose.shoulderZ);
@@ -690,68 +695,156 @@ export class GaltisOriginalAvatar {
       this.currentRightPose.wristX = lerpVal(this.currentRightPose.wristX, this.targetRightPose.wristX);
       this.currentRightPose.wristY = lerpVal(this.currentRightPose.wristY, this.targetRightPose.wristY);
       this.currentRightPose.wristZ = lerpVal(this.currentRightPose.wristZ, this.targetRightPose.wristZ);
+      this.currentRightPose.thumb = lerpVal(this.currentRightPose.thumb, this.targetRightPose.thumb, 0.2);
+      this.currentRightPose.index = lerpVal(this.currentRightPose.index, this.targetRightPose.index, 0.2);
+      this.currentRightPose.middle = lerpVal(this.currentRightPose.middle, this.targetRightPose.middle, 0.25);
+      this.currentRightPose.ring = lerpVal(this.currentRightPose.ring, this.targetRightPose.ring, 0.25);
+      this.currentRightPose.pinky = lerpVal(this.currentRightPose.pinky, this.targetRightPose.pinky, 0.25);
+
+      // Left Arm Lerping
+      this.currentLeftPose.shoulderX = lerpVal(this.currentLeftPose.shoulderX, this.targetLeftPose.shoulderX);
+      this.currentLeftPose.shoulderY = lerpVal(this.currentLeftPose.shoulderY, this.targetLeftPose.shoulderY);
+      this.currentLeftPose.shoulderZ = lerpVal(this.currentLeftPose.shoulderZ, this.targetLeftPose.shoulderZ);
+      this.currentLeftPose.elbowX = lerpVal(this.currentLeftPose.elbowX, this.targetLeftPose.elbowX);
+      this.currentLeftPose.elbowY = lerpVal(this.currentLeftPose.elbowY, this.targetLeftPose.elbowY);
+      this.currentLeftPose.elbowZ = lerpVal(this.currentLeftPose.elbowZ, this.targetLeftPose.elbowZ);
+      this.currentLeftPose.wristX = lerpVal(this.currentLeftPose.wristX, this.targetLeftPose.wristX);
+      this.currentLeftPose.wristY = lerpVal(this.currentLeftPose.wristY, this.targetLeftPose.wristY);
+      this.currentLeftPose.wristZ = lerpVal(this.currentLeftPose.wristZ, this.targetLeftPose.wristZ);
+      this.currentLeftPose.thumb = lerpVal(this.currentLeftPose.thumb, this.targetLeftPose.thumb, 0.2);
+      this.currentLeftPose.index = lerpVal(this.currentLeftPose.index, this.targetLeftPose.index, 0.2);
+      this.currentLeftPose.middle = lerpVal(this.currentLeftPose.middle, this.targetLeftPose.middle, 0.25);
+      this.currentLeftPose.ring = lerpVal(this.currentLeftPose.ring, this.targetLeftPose.ring, 0.25);
+      this.currentLeftPose.pinky = lerpVal(this.currentLeftPose.pinky, this.targetLeftPose.pinky, 0.25);
+
+      // Head Lerping
+      this.currentHeadPose.nod = lerpVal(this.currentHeadPose.nod, this.targetHeadPose.nod, 0);
+      this.currentHeadPose.tilt = lerpVal(this.currentHeadPose.tilt, this.targetHeadPose.tilt, 0);
+      this.currentHeadPose.turn = lerpVal(this.currentHeadPose.turn, this.targetHeadPose.turn, 0);
 
       // Idle breathing wave
       const breathing = Math.sin(elapsedTime * 2.2) * 0.02;
 
-      // Apply to Right Arm Bones
-      if (this.rightUpperArm) {
-        this.rightUpperArm.rotation.x = (this.currentRightPose.shoulderX || 0) + breathing;
-        this.rightUpperArm.rotation.y = this.currentRightPose.shoulderY || 0;
-        this.rightUpperArm.rotation.z = -(this.currentRightPose.shoulderZ || 0);
-      }
-      if (this.rightLowerArm) {
-        this.rightLowerArm.rotation.x = this.currentRightPose.elbowX || 0;
-        this.rightLowerArm.rotation.y = this.currentRightPose.elbowY || 0;
-        this.rightLowerArm.rotation.z = -(this.currentRightPose.elbowZ || 0);
-      }
-      if (this.rightHand) {
-        this.rightHand.rotation.x = this.currentRightPose.wristX || 0;
-        this.rightHand.rotation.y = this.currentRightPose.wristY || 0;
-        this.rightHand.rotation.z = -(this.currentRightPose.wristZ || 0);
+      const isFullMesh = this.modelVariant !== 'hello';
+
+      if (isFullMesh) {
+        // --- 1. FULL BODY MOCAP RIG (galtis_mesh.fbx) ---
+        // Right Arm (Bicep_R, Forearm_R, Hand_R)
+        const restRU = this.rightUpperArm ? this.restEulers.get(this.rightUpperArm.name) : null;
+        if (this.rightUpperArm && restRU) {
+          const elevation = -(this.currentRightPose.shoulderX || 0);
+          const abduction = Math.abs(this.currentRightPose.shoulderZ || 0);
+          this.rightUpperArm.rotation.z = restRU.z + elevation * 0.9;
+          this.rightUpperArm.rotation.x = restRU.x + abduction * 0.6 + breathing;
+          this.rightUpperArm.rotation.y = restRU.y + (this.currentRightPose.shoulderY || 0) * 0.5;
+        }
+
+        const restRL = this.rightLowerArm ? this.restEulers.get(this.rightLowerArm.name) : null;
+        if (this.rightLowerArm && restRL) {
+          const flexion = Math.max(0, (this.currentRightPose.elbowX || 0));
+          this.rightLowerArm.rotation.z = restRL.z + flexion * 0.8;
+          this.rightLowerArm.rotation.x = restRL.x + (this.currentRightPose.elbowZ || 0) * 0.4;
+        }
+
+        const restRH = this.rightHand ? this.restEulers.get(this.rightHand.name) : null;
+        if (this.rightHand && restRH) {
+          this.rightHand.rotation.z = restRH.z + (this.currentRightPose.wristX || 0) * 0.7;
+          this.rightHand.rotation.y = restRH.y + (this.currentRightPose.wristY || 0) * 0.7;
+        }
+
+        // Left Arm (Bicep_L, Forearm_L, Hand_L)
+        const restLU = this.leftUpperArm ? this.restEulers.get(this.leftUpperArm.name) : null;
+        if (this.leftUpperArm && restLU) {
+          const elevation = -(this.currentLeftPose.shoulderX || 0);
+          const abduction = Math.abs(this.currentLeftPose.shoulderZ || 0);
+          this.leftUpperArm.rotation.z = restLU.z - elevation * 0.9;
+          this.leftUpperArm.rotation.x = restLU.x + abduction * 0.6 + breathing;
+          this.leftUpperArm.rotation.y = restLU.y - (this.currentLeftPose.shoulderY || 0) * 0.5;
+        }
+
+        const restLL = this.leftLowerArm ? this.restEulers.get(this.leftLowerArm.name) : null;
+        if (this.leftLowerArm && restLL) {
+          const flexion = Math.max(0, (this.currentLeftPose.elbowX || 0));
+          this.leftLowerArm.rotation.z = restLL.z - flexion * 0.8;
+          this.leftLowerArm.rotation.x = restLL.x + (this.currentLeftPose.elbowZ || 0) * 0.4;
+        }
+
+        const restLH = this.leftHand ? this.restEulers.get(this.leftHand.name) : null;
+        if (this.leftHand && restLH) {
+          this.leftHand.rotation.z = restLH.z - (this.currentLeftPose.wristX || 0) * 0.7;
+          this.leftHand.rotation.y = restLH.y - (this.currentLeftPose.wristY || 0) * 0.7;
+        }
+      } else {
+        // --- 2. HELLO RIG (galtis_hello.fbx) ---
+        const restRU = this.rightUpperArm ? this.restEulers.get(this.rightUpperArm.name) : null;
+        if (this.rightUpperArm && restRU) {
+          const elevation = -(this.currentRightPose.shoulderX || 0);
+          const abduction = Math.abs(this.currentRightPose.shoulderZ || 0);
+          this.rightUpperArm.rotation.x = restRU.x + elevation * 1.1 + breathing;
+          this.rightUpperArm.rotation.z = restRU.z + abduction * 0.7;
+          this.rightUpperArm.rotation.y = restRU.y + (this.currentRightPose.shoulderY || 0) * 0.5;
+        }
+
+        const restRL = this.rightLowerArm ? this.restEulers.get(this.rightLowerArm.name) : null;
+        if (this.rightLowerArm && restRL) {
+          const flexion = Math.max(0, (this.currentRightPose.elbowX || 0));
+          this.rightLowerArm.rotation.x = restRL.x + flexion * 1.0;
+        }
+
+        const restRH = this.rightHand ? this.restEulers.get(this.rightHand.name) : null;
+        if (this.rightHand && restRH) {
+          this.rightHand.rotation.x = restRH.x + (this.currentRightPose.wristX || 0) * 0.7;
+        }
+
+        const restLU = this.leftUpperArm ? this.restEulers.get(this.leftUpperArm.name) : null;
+        if (this.leftUpperArm && restLU) {
+          const elevation = -(this.currentLeftPose.shoulderX || 0);
+          const abduction = Math.abs(this.currentLeftPose.shoulderZ || 0);
+          this.leftUpperArm.rotation.x = restLU.x + elevation * 1.1 + breathing;
+          this.leftUpperArm.rotation.z = restLU.z - abduction * 0.7;
+          this.leftUpperArm.rotation.y = restLU.y - (this.currentLeftPose.shoulderY || 0) * 0.5;
+        }
+
+        const restLL = this.leftLowerArm ? this.restEulers.get(this.leftLowerArm.name) : null;
+        if (this.leftLowerArm && restLL) {
+          const flexion = Math.max(0, (this.currentLeftPose.elbowX || 0));
+          this.leftLowerArm.rotation.x = restLL.x + flexion * 1.0;
+        }
+
+        const restLH = this.leftHand ? this.restEulers.get(this.leftHand.name) : null;
+        if (this.leftHand && restLH) {
+          this.leftHand.rotation.x = restLH.x + (this.currentLeftPose.wristX || 0) * 0.7;
+        }
       }
 
-      // Apply to Left Arm Bones
-      if (this.leftUpperArm) {
-        this.leftUpperArm.rotation.x = (this.targetLeftPose.shoulderX || 0) + breathing;
-        this.leftUpperArm.rotation.y = -(this.targetLeftPose.shoulderY || 0);
-        this.leftUpperArm.rotation.z = this.targetLeftPose.shoulderZ || 0;
-      }
-      if (this.leftLowerArm) {
-        this.leftLowerArm.rotation.x = this.targetLeftPose.elbowX || 0;
-        this.leftLowerArm.rotation.y = -(this.targetLeftPose.elbowY || 0);
-        this.leftLowerArm.rotation.z = this.targetLeftPose.elbowZ || 0;
-      }
-      if (this.leftHand) {
-        this.leftHand.rotation.x = this.targetLeftPose.wristX || 0;
-        this.leftHand.rotation.y = -(this.targetLeftPose.wristY || 0);
-        this.leftHand.rotation.z = this.targetLeftPose.wristZ || 0;
-      }
+      // Apply finger curling to real finger bones relative to rest
+      this.applyFingerBends(this.rightThumb, this.currentRightPose.thumb ?? 0.2);
+      this.applyFingerBends(this.rightIndex, this.currentRightPose.index ?? 0.2);
+      this.applyFingerBends(this.rightMiddle, this.currentRightPose.middle ?? 0.25);
+      this.applyFingerBends(this.rightRing, this.currentRightPose.ring ?? 0.25);
+      this.applyFingerBends(this.rightPinky, this.currentRightPose.pinky ?? 0.25);
 
-      // Apply finger curling to real finger bones
-      this.applyFingerBends(this.rightThumb, this.targetRightPose.thumb ?? 0.2);
-      this.applyFingerBends(this.rightIndex, this.targetRightPose.index ?? 0.2);
-      this.applyFingerBends(this.rightMiddle, this.targetRightPose.middle ?? 0.25);
-      this.applyFingerBends(this.rightRing, this.targetRightPose.ring ?? 0.25);
-      this.applyFingerBends(this.rightPinky, this.targetRightPose.pinky ?? 0.25);
+      this.applyFingerBends(this.leftThumb, this.currentLeftPose.thumb ?? 0.2);
+      this.applyFingerBends(this.leftIndex, this.currentLeftPose.index ?? 0.2);
+      this.applyFingerBends(this.leftMiddle, this.currentLeftPose.middle ?? 0.25);
+      this.applyFingerBends(this.leftRing, this.currentLeftPose.ring ?? 0.25);
+      this.applyFingerBends(this.leftPinky, this.currentLeftPose.pinky ?? 0.25);
 
-      this.applyFingerBends(this.leftThumb, this.targetLeftPose.thumb ?? 0.2);
-      this.applyFingerBends(this.leftIndex, this.targetLeftPose.index ?? 0.2);
-      this.applyFingerBends(this.leftMiddle, this.targetLeftPose.middle ?? 0.25);
-      this.applyFingerBends(this.leftRing, this.targetLeftPose.ring ?? 0.25);
-      this.applyFingerBends(this.leftPinky, this.targetLeftPose.pinky ?? 0.25);
-
-      // Spine & Head breathing
+      // Spine & Head
       if (this.spineBone) {
-        this.spineBone.rotation.x = breathing * 0.5;
+        const restSpine = this.restEulers.get(this.spineBone.name);
+        if (restSpine) this.spineBone.rotation.x = restSpine.x + breathing * 0.5;
       }
       if (this.headBone) {
-        const nod = this.targetHeadPose.nod || 0;
-        const tilt = this.targetHeadPose.tilt || 0;
-        const turn = this.targetHeadPose.turn || 0;
-        this.headBone.rotation.x = nod + Math.sin(elapsedTime * 1.5) * 0.015;
-        this.headBone.rotation.z = tilt;
-        this.headBone.rotation.y = turn;
+        const restHead = this.restEulers.get(this.headBone.name);
+        const nod = this.currentHeadPose.nod || 0;
+        const tilt = this.currentHeadPose.tilt || 0;
+        const turn = this.currentHeadPose.turn || 0;
+        if (restHead) {
+          this.headBone.rotation.x = restHead.x + nod + Math.sin(elapsedTime * 1.5) * 0.012;
+          this.headBone.rotation.z = restHead.z + tilt;
+          this.headBone.rotation.y = restHead.y + turn;
+        }
       }
     }
   }
@@ -765,7 +858,12 @@ export class GaltisOriginalAvatar {
     if (bones.length === 0) return;
     const bendPerBone = curlAmount * 0.65;
     bones.forEach((bone) => {
-      bone.rotation.x = bendPerBone;
+      const rest = this.restEulers.get(bone.name);
+      if (rest) {
+        bone.rotation.x = rest.x + bendPerBone;
+      } else {
+        bone.rotation.x = bendPerBone;
+      }
     });
   }
 
