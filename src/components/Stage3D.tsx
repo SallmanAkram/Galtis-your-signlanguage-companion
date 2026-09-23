@@ -27,6 +27,7 @@ interface Stage3DProps {
   stageBackground?: StageBackground;
   isDictionaryOpen?: boolean;
   liveTrackingKeyframeRef?: React.MutableRefObject<GestureKeyframe | null>;
+  onRegisterCanvas?: (canvas: HTMLCanvasElement | null) => void;
 }
 
 export const Stage3D: React.FC<Stage3DProps> = ({
@@ -44,6 +45,7 @@ export const Stage3D: React.FC<Stage3DProps> = ({
   stageBackground = 'mist',
   isDictionaryOpen = false,
   liveTrackingKeyframeRef,
+  onRegisterCanvas,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const characterRef = useRef<Character3D | null>(null);
@@ -94,6 +96,9 @@ export const Stage3D: React.FC<Stage3DProps> = ({
     isDictionaryOpen,
   };
 
+  const onRegisterCanvasRef = useRef(onRegisterCanvas);
+  onRegisterCanvasRef.current = onRegisterCanvas;
+
   // When viewMode changes, smoothly reset manual orbit drag offset to allow clean preset framing
   useEffect(() => {
     orbitAngleRef.current = { theta: 0, phi: 0 };
@@ -122,8 +127,13 @@ export const Stage3D: React.FC<Stage3DProps> = ({
     camera.position.set(0, 1.45, 2.6);
     cameraRef.current = camera;
 
-    // WebGL Renderer with alpha transparency support for animated custom backgrounds
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    // WebGL Renderer with alpha transparency support and preserved drawing buffer for glitch-free frame recording
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: true,
+    });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
@@ -132,6 +142,7 @@ export const Stage3D: React.FC<Stage3DProps> = ({
     renderer.toneMappingExposure = 1.15;
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+    onRegisterCanvasRef.current?.(renderer.domElement);
 
     // Studio Portrait Lighting Rig for Galtis 3D Avatar (Consistent across all environments/shaders)
     // 1. Ambient Light: Natural warm studio ambient to preserve hand, finger, and face visibility
@@ -291,6 +302,7 @@ export const Stage3D: React.FC<Stage3DProps> = ({
         activeEnvInstanceRef.current = null;
       }
       galtisAvatar.dispose();
+      onRegisterCanvasRef.current?.(null);
       renderer.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);

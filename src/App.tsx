@@ -13,7 +13,9 @@ import Lightfall from './components/backgrounds/Lightfall';
 import GradientWaves from './components/backgrounds/GradientWaves';
 import Aurora from './components/backgrounds/Aurora';
 import { InstallAppButton } from './components/InstallAppButton';
+import { ShareSignModal } from './components/ShareSignModal';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
+import { useAvatarRecorder } from './hooks/useAvatarRecorder';
 import { COMPANIONS, ALL_SIGNS } from './data/aslDictionary';
 import { STUDIO_GALT_DICTIONARY, convertStudioGaltKeyposeToRigPose } from './data/studioGaltDictionary';
 import {
@@ -26,7 +28,7 @@ import {
   GestureKeyframe,
   StageBackground,
 } from './types';
-import { Sparkles, Mic, MicOff, Send, Eye, Activity, AlertTriangle, Upload } from 'lucide-react';
+import { Sparkles, Mic, MicOff, Send, Eye, Activity, AlertTriangle, Upload, Save } from 'lucide-react';
 
 export default function App() {
   const isSecureContext = typeof window !== 'undefined' ? window.isSecureContext : true;
@@ -88,6 +90,20 @@ export default function App() {
   );
   const [activeKeyposeIdx, setActiveKeyposeIdx] = useState<number>(0);
   const [manualKeyframe, setManualKeyframe] = useState<GestureKeyframe | null>(null);
+
+  // Avatar Canvas Recorder for Share Signs feature
+  const {
+    canvasRef,
+    isRecording: isRecorderActive,
+    hasNewRecording,
+    lastRecordedSign,
+    startRecording,
+    trackWord,
+    stopRecording,
+    clearNewRecordingBadge,
+  } = useAvatarRecorder();
+
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
   // Quick signs list exclusively with StudioGalt authentic MoCap gestures
   const quickSigns = [
@@ -263,13 +279,16 @@ export default function App() {
       const remaining = prev.filter((item) => item.id !== id);
       if (remaining.length === 0) {
         setCurrentSignName(null);
+        stopRecording();
       }
       return remaining;
     });
-  }, []);
+  }, [stopRecording]);
 
   const handleSignStart = useCallback((name: string) => {
     setCurrentSignName(name);
+    startRecording(name);
+    trackWord(name);
     const match = STUDIO_GALT_DICTIONARY.find(
       (w) => w.word.toUpperCase() === name.toUpperCase()
     );
@@ -277,7 +296,7 @@ export default function App() {
       setSelectedStudioGaltWord(match);
       setActiveKeyposeIdx(0);
     }
-  }, []);
+  }, [startRecording, trackWord]);
 
   // Auto-switch camera to close-up upper body when dictionary is opened, and restore on normal mode
   const isDictionaryActive = activeTab === 'dictionary' || isFullDictionaryModalOpen;
@@ -310,6 +329,11 @@ export default function App() {
     if (sign) handleTriggerSignFromDictionary(sign);
     else processFinalSpeech(word, 'keyboard');
   };
+
+  // Re-record or record a specific sign from the Share modal
+  const handleRecordSign = useCallback((word: string) => {
+    handleTriggerWord(word);
+  }, []);
 
   // Trigger fingerspelling directly
   const handleTriggerLetter = (letter: string) => {
@@ -508,6 +532,9 @@ export default function App() {
               avatarSkin={avatarSkin}
               stageBackground={stageBackground}
               isDictionaryOpen={isDictionaryActive}
+              onRegisterCanvas={(canvas) => {
+                canvasRef.current = canvas;
+              }}
             />
           </div>
         </div>
@@ -531,8 +558,8 @@ export default function App() {
             <InstallAppButton />
           </div>
 
-          {/* Quick Camera & Rig Telemetry Controls */}
-          <div className="pointer-events-auto flex items-center gap-2">
+          {/* Quick Camera & Rig Telemetry Controls + Save Recording Button */}
+          <div className="pointer-events-auto flex flex-col items-end gap-2">
             <div className="flex items-center p-1 rounded-full bg-black/40 border border-white/20 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.35)] gap-1">
               {/* Camera View Mode Switcher */}
               <button
@@ -616,6 +643,36 @@ export default function App() {
                 )}
               </button>
             </div>
+
+            {/* Save & Share Recording Round Button (Positioned at top right side below the mic indicator button) */}
+            <button
+              id="save-sign-button"
+              onClick={() => {
+                clearNewRecordingBadge();
+                setIsShareModalOpen(true);
+              }}
+              title="Save & Share Sign Recording (Video / GIF)"
+              aria-label="Save and share sign recording"
+              className={`relative group flex items-center justify-center w-8.5 h-8.5 sm:w-9.5 sm:h-9.5 rounded-full border transition-all duration-200 active:scale-95 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-xl ${
+                isRecorderActive
+                  ? 'bg-rose-500/25 border-rose-400 text-rose-300 ring-1 ring-rose-400/50'
+                  : 'bg-black/40 hover:bg-white/[0.12] border-white/20 hover:border-purple-400/60 text-white/90 hover:text-white'
+              }`}
+            >
+              <Save className="w-4 h-4 text-purple-300 group-hover:text-purple-200 transition-transform group-hover:scale-110" />
+              {hasNewRecording && !isRecorderActive && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-teal-400" />
+                </span>
+              )}
+              {isRecorderActive && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-400" />
+                </span>
+              )}
+            </button>
           </div>
         </div>
 
@@ -1012,6 +1069,15 @@ export default function App() {
           activeStudioGaltWord={activeStudioGaltWord}
           onSelectKeypose={handleSelectKeypose}
           activeKeyposeIdx={activeKeyposeIdx}
+        />
+
+        {/* Share & Save Sign Recording Modal */}
+        <ShareSignModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          recording={lastRecordedSign}
+          onRecordSign={handleRecordSign}
+          isRecordingActive={isRecorderActive}
         />
       </main>
     </div>
