@@ -12,6 +12,7 @@ import LightRays from './components/backgrounds/LightRays';
 import Lightfall from './components/backgrounds/Lightfall';
 import GradientWaves from './components/backgrounds/GradientWaves';
 import Aurora from './components/backgrounds/Aurora';
+import { InstallAppButton } from './components/InstallAppButton';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { COMPANIONS, ALL_SIGNS } from './data/aslDictionary';
 import { STUDIO_GALT_DICTIONARY, convertStudioGaltKeyposeToRigPose } from './data/studioGaltDictionary';
@@ -525,6 +526,9 @@ export default function App() {
                 {currentSignName ? `SIGN: ${currentSignName}` : 'GALTIS 8 MoCap'}
               </span>
             </div>
+
+            {/* Install App / Add to Homescreen Button */}
+            <InstallAppButton />
           </div>
 
           {/* Quick Camera & Rig Telemetry Controls */}

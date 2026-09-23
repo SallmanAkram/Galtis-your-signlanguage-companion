@@ -1,0 +1,31 @@
+{
+  "name": "SignBridge | 3D ASL Sign Language Companion",
+  "short_name": "SignBridge",
+  "description": "3D ASL Sign Language Companion featuring the Galtis avatar and StudioGalt Motion Capture Dictionary with live bone animation coordinates, gesture playback, and voice-to-sign translation.",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/play_no_bg.png",
+      "sizes": "500x500",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["education", "utilities", "accessibility"]
+}
