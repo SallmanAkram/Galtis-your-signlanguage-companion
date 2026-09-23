@@ -25,9 +25,7 @@ fs.cpSync(distDir, deployDir, { recursive: true });
 
 // Copy Netlify configs (_redirects and _headers are the standard files read by Netlify Drop)
 console.log('⚙️  Configuring Netlify routing (_redirects) and headers (_headers)...');
-if (fs.existsSync(path.resolve(rootDir, 'public', '_redirects'))) {
-  fs.copyFileSync(path.resolve(rootDir, 'public', '_redirects'), path.resolve(deployDir, '_redirects'));
-}
+fs.writeFileSync(path.resolve(deployDir, '_redirects'), '/*  /index.html  200\n', 'utf8');
 if (fs.existsSync(path.resolve(rootDir, 'public', '_headers'))) {
   fs.copyFileSync(path.resolve(rootDir, 'public', '_headers'), path.resolve(deployDir, '_headers'));
 }
