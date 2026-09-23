@@ -54,7 +54,7 @@ export default function App() {
     showBoneCoordinatesHud: false,
     showSkeletalJoints: false,
     soundFeedback: true,
-    viewMode: 'front',
+    viewMode: 'upper_body',
   });
 
   // Settings Drawer state
@@ -287,7 +287,7 @@ export default function App() {
     if (isDictionaryActive) {
       setSettings((prev) => ({ ...prev, viewMode: 'upper_body' }));
     } else if (!userSelectedViewModeRef.current) {
-      setSettings((prev) => ({ ...prev, viewMode: 'front' }));
+      setSettings((prev) => ({ ...prev, viewMode: 'upper_body' }));
     }
   }, [isDictionaryActive]);
 
