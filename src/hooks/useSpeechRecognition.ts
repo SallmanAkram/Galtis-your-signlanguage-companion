@@ -30,11 +30,15 @@ export function useSpeechRecognition({
   const activeEngineRef = useRef<'native' | 'media_recorder' | null>(null);
   const hasReceivedNativeResultsRef = useRef(false);
   const isManuallyStoppedRef = useRef(false);
+  const restartTimerRef = useRef<any>(null);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
+
+  // Detect Android device
+  const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
 
   // Check browser speech recognition & media recording support
   useEffect(() => {
@@ -77,7 +81,7 @@ export function useSpeechRecognition({
     }
   }, [autoFingerspell, onNewSignsParsed]);
 
-  // Connect an audio MediaStream to Web Audio API for Grok waveform visualization
+  // Connect an audio MediaStream to Web Audio API for waveform visualization
   const attachAudioMeterStream = useCallback((stream: MediaStream) => {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -109,7 +113,6 @@ export function useSpeechRecognition({
         const avg = sum / bufferLength;
         setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
 
-        // Divide frequencies into 4 distinct bands for the 4 visualizer lines
         const quarter = Math.max(1, Math.floor(bufferLength / 4));
         const b1 = dataArray.slice(0, quarter).reduce((a, b) => a + b, 0) / (quarter * 255);
         const b2 = dataArray.slice(quarter, quarter * 2).reduce((a, b) => a + b, 0) / (quarter * 255);
@@ -127,13 +130,16 @@ export function useSpeechRecognition({
     }
   }, []);
 
-  // Request audio meter stream if not already provided
+  // Waveform visualizer loop
   const startAudioMeter = useCallback(async () => {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      // Audio level fallback loop if mic permission blocked or in restricted context
+    // CRITICAL FOR ANDROID:
+    // Android's audio hardware does NOT permit opening getUserMedia() at the same time as
+    // native SpeechRecognition without causing an exclusive mic lock conflict (audio-capture error).
+    // When native SpeechRecognition is active or on Android, use animated visualizer values.
+    if (isAndroid || activeEngineRef.current === 'native') {
       const fallbackLoop = () => {
         if (!isListening) return;
-        const base = 0.2 + Math.random() * 0.5;
+        const base = 0.25 + Math.random() * 0.45;
         setAudioLevel(Math.floor(base * 100));
         setAudioFrequencies([
           Math.min(1, base * (0.6 + Math.random() * 0.7)),
@@ -147,6 +153,10 @@ export function useSpeechRecognition({
       return;
     }
 
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
@@ -154,7 +164,7 @@ export function useSpeechRecognition({
     } catch (err) {
       console.warn('Could not start audio meter from mic:', err);
     }
-  }, [attachAudioMeterStream, isListening]);
+  }, [attachAudioMeterStream, isAndroid, isListening]);
 
   const stopAudioMeter = useCallback(() => {
     if (animFrameRef.current) {
@@ -174,7 +184,7 @@ export function useSpeechRecognition({
     setAudioFrequencies([0, 0, 0, 0]);
   }, []);
 
-  // Send recorded audio blob to /api/transcribe (powered by Gemini)
+  // Send recorded audio blob to /api/transcribe (fallback for non-SpeechRecognition browsers)
   const sendAudioForTranscription = useCallback(async (blob: Blob) => {
     if (blob.size < 400) return;
 
@@ -214,7 +224,7 @@ export function useSpeechRecognition({
     }
   }, [processFinalSpeech]);
 
-  // Fallback MediaRecorder implementation for Firefox, Brave, and unsupported Web Speech browsers
+  // Fallback MediaRecorder implementation for Firefox desktop
   const startMediaRecorderFallback = useCallback(async () => {
     if (typeof window !== 'undefined' && window.isSecureContext === false) {
       setErrorMsg('Microphone & Camera require HTTPS or http://localhost when accessing from mobile devices. Please open the HTTPS development URL.');
@@ -242,7 +252,6 @@ export function useSpeechRecognition({
       mediaStreamRef.current = stream;
       attachAudioMeterStream(stream);
 
-      // Determine best supported container MIME type
       const mimeType = [
         'audio/webm;codecs=opus',
         'audio/webm',
@@ -272,7 +281,6 @@ export function useSpeechRecognition({
         }
 
         if (!isManuallyStoppedRef.current && continuous) {
-          // Restart recording slice if still in continuous mode
           try {
             if (mediaStreamRef.current && mediaStreamRef.current.active) {
               recorder.start(1000);
@@ -304,7 +312,7 @@ export function useSpeechRecognition({
     }
   }, [attachAudioMeterStream, continuous, sendAudioForTranscription, stopAudioMeter]);
 
-  // Start listening (Hybrid strategy: Web Speech primary, MediaRecorder fallback)
+  // Start listening (Fully cross-platform: Android Chrome, iOS Safari, Desktop)
   const startListening = useCallback(() => {
     if (typeof window !== 'undefined' && window.isSecureContext === false) {
       setErrorMsg('Microphone & Camera require HTTPS or http://localhost when accessing from mobile devices. Please open the HTTPS development URL.');
@@ -312,7 +320,7 @@ export function useSpeechRecognition({
 
     const SpeechRec = typeof window !== 'undefined' ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) : null;
 
-    // If Web Speech API is completely absent (e.g. Firefox), directly use MediaRecorder
+    // If Web Speech API is absent (e.g. Firefox), use MediaRecorder
     if (!SpeechRec) {
       startMediaRecorderFallback();
       return;
@@ -322,15 +330,23 @@ export function useSpeechRecognition({
     hasReceivedNativeResultsRef.current = false;
     setErrorMsg(null);
 
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+
     try {
       if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch {}
         try { recognitionRef.current.stop(); } catch {}
       }
 
       const recognition = new SpeechRec();
-      recognition.continuous = continuous;
+      // On Android Chrome, continuous=false with debounced auto-restart in onend
+      // prevents Android's speech service from freezing or cutting off after 1 phrase!
+      recognition.continuous = isAndroid ? false : continuous;
       recognition.interimResults = true;
-      recognition.lang = 'en-US';
+      recognition.lang = (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : 'en-US';
 
       recognition.onstart = () => {
         setIsListening(true);
@@ -344,17 +360,20 @@ export function useSpeechRecognition({
         let final = '';
 
         for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            final += event.results[i][0].transcript;
+          const res = event.results[i];
+          if (res.isFinal) {
+            final += res[0].transcript;
           } else {
-            interim += event.results[i][0].transcript;
+            interim += res[0].transcript;
           }
         }
 
-        setInterimText(interim);
+        if (interim) {
+          setInterimText(interim);
+        }
 
         if (final.trim()) {
-          processFinalSpeech(final, 'mic');
+          processFinalSpeech(final.trim(), 'mic');
           setInterimText('');
         }
       };
@@ -362,10 +381,21 @@ export function useSpeechRecognition({
       recognition.onerror = (event: any) => {
         console.warn('Native speech recognition error:', event.error);
 
-        // In browsers like Brave or privacy setups that block Google Speech backend,
-        // automatically switch to MediaRecorder + Gemini fallback!
+        // 'no-speech' is triggered when the user pauses on Android. It is NOT fatal!
+        if (event.error === 'no-speech' || event.error === 'aborted') {
+          return;
+        }
+
+        // On Android, if a brief audio-capture blip occurs, don't abort—let onend restart smoothly
+        if (event.error === 'audio-capture') {
+          console.info('Transient audio-capture notice on mobile, continuing...');
+          return;
+        }
+
+        // Only switch to MediaRecorder on non-Android platforms if Google Speech backend is blocked
         if (
-          (event.error === 'service-not-allowed' || event.error === 'network' || event.error === 'audio-capture') &&
+          !isAndroid &&
+          (event.error === 'service-not-allowed') &&
           !hasReceivedNativeResultsRef.current
         ) {
           console.info('Switching to MediaRecorder transcription fallback due to:', event.error);
@@ -378,25 +408,45 @@ export function useSpeechRecognition({
           setErrorMsg(
             window.isSecureContext === false
               ? 'Microphone access requires HTTPS when accessing from mobile devices.'
-              : 'Microphone access denied. Please enable microphone permissions in your browser.'
+              : 'Microphone permission denied. Please allow microphone access in your browser.'
           );
-        } else if (event.error !== 'no-speech') {
-          setErrorMsg(`Mic note: ${event.error}. Listening continues.`);
+          setIsListening(false);
+          stopAudioMeter();
+        } else if (event.error === 'network') {
+          console.warn('Speech recognition transient network note on mobile device.');
+        } else {
+          setErrorMsg(`Mic note: ${event.error}.`);
         }
       };
 
       recognition.onend = () => {
         if (activeEngineRef.current !== 'native') return;
 
-        // Auto restart if continuous and not manually stopped
+        if (restartTimerRef.current) {
+          clearTimeout(restartTimerRef.current);
+          restartTimerRef.current = null;
+        }
+
+        // Auto restart if continuous listening is enabled and not manually stopped
         if (!isManuallyStoppedRef.current && continuous) {
-          try {
-            recognition.start();
-          } catch {
-            setIsListening(false);
-            stopAudioMeter();
-            activeEngineRef.current = null;
-          }
+          // On Android, debounce restart by 250ms to allow Android's Audio HAL to release
+          restartTimerRef.current = setTimeout(() => {
+            if (!isManuallyStoppedRef.current) {
+              try {
+                recognition.start();
+              } catch (err: any) {
+                if (err.name !== 'InvalidStateError') {
+                  console.warn('Recognition auto-restart error:', err);
+                  // Retry once after brief pause
+                  setTimeout(() => {
+                    if (!isManuallyStoppedRef.current) {
+                      try { recognition.start(); } catch {}
+                    }
+                  }, 400);
+                }
+              }
+            }
+          }, isAndroid ? 250 : 60);
         } else {
           setIsListening(false);
           stopAudioMeter();
@@ -408,15 +458,27 @@ export function useSpeechRecognition({
       recognitionRef.current = recognition;
     } catch (err: any) {
       console.warn('Failed to start native SpeechRecognition, falling back:', err);
-      startMediaRecorderFallback();
+      if (!isAndroid) {
+        startMediaRecorderFallback();
+      } else {
+        setIsListening(false);
+      }
     }
-  }, [continuous, processFinalSpeech, startAudioMeter, startMediaRecorderFallback, stopAudioMeter]);
+  }, [continuous, isAndroid, processFinalSpeech, startAudioMeter, startMediaRecorderFallback, stopAudioMeter]);
 
   // Stop listening
   const stopListening = useCallback(() => {
     isManuallyStoppedRef.current = true;
 
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+
     if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {}
       try {
         recognitionRef.current.stop();
       } catch {}
@@ -431,6 +493,7 @@ export function useSpeechRecognition({
 
     setIsListening(false);
     stopAudioMeter();
+    activeEngineRef.current = null;
   }, [stopAudioMeter]);
 
   const toggleListening = useCallback(() => {
