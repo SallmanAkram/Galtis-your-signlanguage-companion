@@ -1,0 +1,41 @@
+[build]
+  publish = "dist"
+  functions = "netlify/functions"
+  command = "npm run build"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/transcribe"
+  to = "/.netlify/functions/transcribe"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(self), microphone=(self)"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/animations/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"
+
+[[headers]]
+  for = "/models/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400, stale-while-revalidate=604800"

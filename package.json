@@ -12,7 +12,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "convert:dictionary": "node scripts/batch-convert-fbx-to-json.mjs",
-    "test:dictionary": "tsx scripts/test-dictionary-import.ts"
+    "test:dictionary": "tsx scripts/test-dictionary-import.ts",
+    "package:deploy": "node scripts/package-netlify.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

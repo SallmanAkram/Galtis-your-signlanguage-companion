@@ -191,6 +191,9 @@ export function useSpeechRecognition({
       });
 
       if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error('AI transcription service not found. For direct native voice recognition, use Google Chrome, Edge, or Safari.');
+        }
         throw new Error(`Server returned HTTP ${res.status}`);
       }
 
@@ -205,7 +208,7 @@ export function useSpeechRecognition({
     } catch (err: any) {
       console.warn('Transcription request error:', err);
       setInterimText('');
-      setErrorMsg('Could not transcribe audio. Check server connection or use Quick Prompts.');
+      setErrorMsg(err?.message?.includes('Chrome') ? err.message : 'Could not transcribe audio. Check server connection or use Quick Prompts.');
     } finally {
       setIsTranscribing(false);
     }
