@@ -1,17 +1,10 @@
 # SignBridge — 3D ASL Sign Language Companion
 
-## Charcoal Suit skin
 
-Choose **Skins → Charcoal Suit** for a reference-inspired charcoal outfit,
-white shirt, teal tie, espresso hair, and dark shoes. The suit details are painted
-by `src/components/galtisSuitMaterial.ts` on the existing Full Body Rig surface;
-this preserves the original silhouette, geometry, skin weights, skeleton, and
-facial morphs. Switching between Male and Charcoal Suit changes only materials
-and keeps the active sign playing. Switching to Female still loads its existing
-separate FBX. No model files or animation recordings are modified.
+<p align="center">
+  <img src="demo_readme.webp" alt="App Demo" width="360" />
+</p>
 
-The skin card uses an actual render of the variant. This is a stylized surface
-skin, so the reference's tailored garment geometry and hairstyle are not added.
 
 > **SignBridge** is a real-time, browser-based 3D American Sign Language (ASL) companion web application powered by **React 19**, **Three.js**, **Tailwind CSS v4**, and authentic **StudioGalt Motion Capture** skeletal animations.
 
