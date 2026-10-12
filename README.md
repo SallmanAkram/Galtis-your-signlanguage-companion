@@ -10,7 +10,7 @@
 
 ---
 
-## 1. System Overview & Purpose
+## System Overview & Purpose
 
 SignBridge bridges auditory and visual communication by converting speech, text, and interactive dictionary selections into high-fidelity 3D sign language gestures performed by the stylized digital human avatar **Galtis**.
 
@@ -23,88 +23,9 @@ SignBridge bridges auditory and visual communication by converting speech, text,
 
 ---
 
-## 2. Architecture & Component Hierarchy
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           App.tsx (Main Viewport)                       │
-├────────────────────────────────────┬────────────────────────────────────┤
-│       Top Status & Camera Bar      │ • Active Sign Badge                │
-│                                    │ • Camera View & HUD Toggles        │
-├────────────────────────────────────┴────────────────────────────────────┤
-│                         Stage3D.tsx (WebGL Canvas)                      │
-│  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │ GaltisOriginalAvatar.ts (FBX Mesh + MoCap Tracks)                  │  │
-│  │   ├── Primary Skin: 'full_mesh' (public/models/galtis_mesh.fbx)    │  │
-│  │   └── Secondary Skin: 'hello'   (public/models/galtis_hello.fbx)   │  │
-│  │ CharacterRig.ts (Procedural Fallback Rig)                         │  │
-│  └───────────────────────────────────────────────────────────────────┘  │
-├─────────────────────────────────────────────────────────────────────────┤
-│                     Overlay & Drawer Subsystems                         │
-│  ├── BottomHalfDrawer.tsx  (Half-screen modal for Dictionary, Skins, AI)│
-│  ├── SettingsDrawer.tsx    (72% width drag-to-open side menu)           │
-│  ├── LiveCoordinateHud.tsx (Bone coordinates & keypose scrubber)        │
-│  └── SignDictionaryModal.tsx (Full-screen deep-dive dictionary)         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                   BottomNavBar.tsx (4 Mobile Nav Tabs)                  │
-│       [1. Play Stage]  [2. Dictionary]  [3. Skins]  [4. AI Voice]       │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
 ---
 
-## 3. Directory Structure & File Manifest
-
-```
-├── README.md                      # This comprehensive architecture document
-├── metadata.json                  # AI Studio application metadata & frame permissions
-├── package.json                   # Project dependencies and run scripts
-├── index.html                     # HTML entry point with viewport configuration
-├── vite.config.ts                 # Vite bundler configuration with Tailwind v4 plugin
-├── tsconfig.json                  # TypeScript compiler options
-│
-├── public/
-│   ├── animations/                # Authentic StudioGalt MoCap frame tracks (JSON format)
-│   │   ├── hello.json, you.json, please.json, my_name_is.json
-│   │   ├── where.json, which.json, this.json, future.json
-│   │   ├── everyone.json, or.json, take.json, turn_off.json, rest_pose.json...
-│   ├── models/
-│   │   ├── galtis_mesh.fbx        # 2023 Full Body Rig with 73 facial blendshapes (Primary)
-│   │   └── galtis_hello.fbx       # 2024 Mesh + Hair model (Secondary skin)
-│   └── assets/                    # Static image and icon assets
-│
-└── src/
-    ├── main.tsx                   # React root mount
-    ├── App.tsx                    # Central state orchestrator, sign queue, and layout
-    ├── types.ts                   # Core TypeScript interfaces, bone data structures, and types
-    ├── index.css                  # Global styles (@import "tailwindcss")
-    │
-    ├── components/
-    │   ├── Stage3D.tsx            # Three.js scene container, lighting, camera, render loop
-    │   ├── GaltisOriginalAvatar.ts# FBX avatar loader, MoCap animation converter & mixer
-    │   ├── CharacterRig.ts        # Procedural fallback humanoid rig with bone rotations
-    │   ├── BottomNavBar.tsx       # 4-button mobile bottom navigation bar
-    │   ├── BottomHalfDrawer.tsx   # Half-screen drawer (Search ASL Dictionary, Skins, AI)
-    │   ├── SettingsDrawer.tsx     # Swipeable left side drawer with persistent grabbable handle
-    │   ├── LiveCoordinateHud.tsx  # Live 3D bone coordinate and keypose inspector
-    │   ├── SignDictionaryModal.tsx# Comprehensive search and category dictionary dialog
-    │   ├── PracticeView.tsx       # Practice & learn quiz view with speed control
-    │   ├── AiSpeechTranslatorView.tsx # AI voice transcription & conversation view
-    │   ├── IOSHeader.tsx          # Simulated mobile status bar
-    │   └── GrokControls.tsx       # Quick sign trigger buttons
-    │
-    ├── data/
-    │   ├── aslDictionary.ts       # Standard ASL gloss definitions, handshapes, fingerspelling
-    │   ├── studioGaltDictionary.ts# MoCap data loader & keypose-to-rig-pose conversion
-    │   └── studioGaltDictionaryData.json # StudioGalt keypose definitions & FACS blendshapes
-    │
-    └── hooks/
-        └── useSpeechRecognition.ts# Web Speech API speech-to-text hook with phrase queueing
-```
-
----
-
-## 4. Detailed Component & System Architecture
+## Detailed Component & System Architecture
 
 ### A. The 3D Engine (`src/components/Stage3D.tsx`)
 - **Three.js Scene**: Renders the character inside a deep purple studio gradient (`#26004d`) with soft directional lighting, rim lights, and an ambient ring platform.
@@ -149,7 +70,7 @@ SignBridge bridges auditory and visual communication by converting speech, text,
 
 ---
 
-## 5. Development Guidelines & Constraints
+## Development Guidelines & Constraints
 
 ### Network & Port Restrictions
 - **Port 3000**: Port 3000 is the **ONLY** externally accessible port. Do NOT change the port in `package.json` or `vite.config.ts`.
@@ -167,7 +88,7 @@ SignBridge bridges auditory and visual communication by converting speech, text,
 
 ---
 
-## 6. Next Steps & Development Roadmap for AI Agents
+## Next Steps & Development Roadmap for AI Agents
 
 When continuing development on SignBridge, prioritize the following milestones:
 
@@ -204,7 +125,7 @@ When continuing development on SignBridge, prioritize the following milestones:
 
 ---
 
-## 7. Verification Commands
+## Verification Commands
 
 Before ending any turn or pushing changes, verify with:
 ```bash
