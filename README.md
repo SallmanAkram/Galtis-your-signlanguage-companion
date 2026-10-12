@@ -2,7 +2,7 @@
 
 
 <p align="center">
-  <img src="demo_readme.webp" alt="App Demo" width="360" />
+  <img src="demo_video.webp" alt="App Demo" width="340" />
 </p>
 
 
